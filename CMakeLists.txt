@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.24)
-
 project(cis565_path_tracer CXX CUDA)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -10,8 +9,10 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# Enable C++11 for host code
-set(CMAKE_CXX_STANDARD 11)
+# Enable C++17 for host code
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -20,32 +21,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     SET_PROPERTY(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-########################################
-# CUDA Setup
-########################################
-find_package(CUDA 10 REQUIRED)
-include(${CMAKE_MODULE_PATH}/CUDAComputesList.cmake)
-
-list(APPEND CUDA_NVCC_FLAGS "-rdc=true")
-list(APPEND CUDA_NVCC_FLAGS ${CUDA_GENERATE_CODE})
-list(APPEND CUDA_NVCC_FLAGS "--std=c++11")
-set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -G")
-set(CUDA_VERBOSE_BUILD ON)
-
-if(WIN32)
-    # Set up include and lib paths
-    set(CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE FILEPATH "Host side compiler used by NVCC" FORCE)
-endif(WIN32)
-########################################
-
 find_package(OpenGL REQUIRED)
 
 if(UNIX)
+    include_directories("${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}")
     find_package(glfw3 REQUIRED)
     find_package(GLEW REQUIRED)
     set(LIBRARIES glfw ${GLEW_LIBRARIES} ${OPENGL_gl_LIBRARY})
 else(UNIX)
-    set(EXTERNAL "external")
+    set(EXTERNAL "${CMAKE_SOURCE_DIR}/external")
 
     set(GLFW_ROOT_DIR ${EXTERNAL})
     set(GLFW_USE_STATIC_LIBS ON)
@@ -57,7 +41,7 @@ else(UNIX)
 
     add_definitions(${GLEW_DEFINITIONS})
     include_directories(${GLEW_INCLUDE_DIR} ${GLFW_INCLUDE_DIR})
-    set(LIBRARIES ${GLEW_LIBRARY} ${GLFW_LIBRARY} ${OPENGL_LIBRARY})
+    set(GL_LIBRARIES ${GLEW_LIBRARY} ${GLFW_LIBRARY} ${OPENGL_LIBRARY})
 endif(UNIX)
 
 set(GLM_ROOT_DIR "external")
@@ -67,7 +51,7 @@ include_directories(${GLM_INCLUDE_DIRS})
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 add_subdirectory(./external/json)
 
-find_package(CUDAToolkit REQUIRED)
+find_package(CCCL REQUIRED)
 
 set(headers
     src/main.h
@@ -131,14 +115,24 @@ source_group("ImGui\\Sources" FILES ${imgui_sources})
 #add_subdirectory(stream_compaction)  # TODO: uncomment if using your stream compaction
 
 add_executable(${CMAKE_PROJECT_NAME} ${sources} ${headers} ${imgui_sources} ${imgui_headers})
+target_link_libraries(${CMAKE_PROJECT_NAME}
+    ${GL_LIBRARIES}
+    nlohmann_json::nlohmann_json
+    cudadevrt
+    CCCL::Thrust
+    #stream_compaction  # TODO: uncomment if using your stream compaction
+)
+if(CMAKE_VERSION VERSION_LESS "3.23.0")
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES OFF)
+elseif(CMAKE_VERSION VERSION_LESS "3.24.0")
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES all-major)
+else()
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_ARCHITECTURES native)
+endif()
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE "$<$<AND:$<CONFIG:Debug,RelWithDebInfo>,$<COMPILE_LANGUAGE:CUDA>>:-G;-src-in-ptx>")
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE "$<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:CUDA>>:-lineinfo;-src-in-ptx>")
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${CMAKE_PROJECT_NAME})
+
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
 )
-set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY CUDA_ARCHITECTURES native)
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    ${LIBRARIES}
-    nlohmann_json::nlohmann_json
-    cudadevrt
-    #stream_compaction  # TODO: uncomment if using your stream compaction
-    )
-

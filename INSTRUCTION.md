@@ -1,12 +1,12 @@
 # Proj 3 CUDA Path Tracer - Instructions
 
-This is due **Tuesday October 3rd** at 11:59pm.
+This is due **Tuesday September 30th** at 11:59pm. You can update your README through **Thursday October 2nd** at 11:59pm.
 
 This project involves a significant bit of running time to generate high-quality images, so be sure to take that into account. You will receive an additional 2 days (due Thursday, October 5th) for "README and Scene" only updates. However, the standard project requirements for READMEs still apply for the October 3th deadline. You may use these two extra days to improve your images, charts, performance analysis, etc.
 
 If you plan to use late days on this project (which we recommend), they will apply to the October 5th deadline. Once you have used your extra days and submitted the project, you will recieve the additional 2 days for "README and Scene" updates only.
 
-[Link to "Pathtracing Primer" Slides](https://1drv.ms/p/s!AiLXbdZHgbemhe96czmjQ4iKDm0Q1w?e=0mOYnL)
+[Link to "Pathtracing Primer" Recitation Slides](https://docs.google.com/presentation/d/1rr6zFbpVkdMEkxBK4QLN4_tBRo168SJA_bMi2GkBB6I/edit?usp=drive_link)
 
 **Summary:**
 
@@ -139,15 +139,17 @@ Group rays by material without a sorting pass. A sane implementation will requir
 * :five: Switch the project from using CUDA-OpenGL Interop to using CUDA-Vulkan interop (this is a really great one for those of you interested in doing Vulkan). Talk to TAs if you are planning to pursue this.
 
 #### Optimization
+
 **For those of you that are not as interested in the topic of rendering**, we encourage you to focus on optimizing the basic path tracer using GPU programming techniques and more advanced CUDA features.
 In addition to the core features, we do recommend at least implementing an OBJ mesh loader before focusing on optimization so that you can load in heavy geometries to start seeing performance hit.
-Please refer to the course materials (especially the CUDA Performance lecture) and the [CUDA's Best Practice Guide](https://docs.nvidia.com/cuda/pdf/CUDA_C_Best_Practices_Guide.pdf) on how to optimize CUDA performance. 
+Please refer to the course materials (especially the CUDA Performance lecture) and the [CUDA's Best Practice Guide](https://docs.nvidia.com/cuda/pdf/CUDA_C_Best_Practices_Guide.pdf) on how to optimize CUDA performance.
 Some examples include:
+
 * Use shared memory to improve memory bandwidth
 * Use intrinsinc functions to improve instruction throughput
 * Use CUDA streams and/or graph for concurrent kernel executions
 
-For each specific optimization technique, please post on Ed Discussion so we can determine the appropriate points to award. 
+For each specific optimization technique, please post on Ed Discussion so we can determine the appropriate points to award.
 
 ## Analysis
 
