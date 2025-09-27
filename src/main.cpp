@@ -24,37 +24,37 @@
 #include <sstream>
 #include <string>
 
+#include "PathTrace/intersections.h"
+
 static std::string startTimeString;
+static bool redrawScene = true;
 
-static struct ControlState
+// Camera
+static struct
 {
+    const glm::vec3 speed_translation {1,1,1};
+    const float speed_yaw = 1;
+    const float speed_pitch = 1;
 
-    // mouse status
-    bool leftMousePressed = false;
-    bool rightMousePressed = false;
-    bool middleMousePressed = false;
+    const float pitch_min = -0.95f * pi_over_2;
+    const float pitch_max = 0.95f * pi_over_2;
+} camProp;
 
-    double mouseLastX;
-    double mouseLastY;
+static glm::vec3 world_x = glm::vec3(1, 0, 0);
+static glm::vec3 world_y = glm::vec3(0, 1, 0);
+static glm::vec3 world_z = glm::vec3(0, 0, 1);
 
-    // 
-} UserControlState;
+static float yaw = 0.0f;
+static float pitch = 0.0f;
 
-// For camera controls
-static bool leftMousePressed = false;
-static bool rightMousePressed = false;
-static bool middleMousePressed = false;
-static double lastX;
-static double lastY;
+static glm::vec3 defaultCameraPosition;
 
-static bool camchanged = true;
-static float dtheta = 0, dphi = 0;
-static glm::vec3 cammove;
+// Mouse
+bool mouseButtonPressing[10];
+double mouseLastX;
+double mouseLastY;
 
-float zoom, theta, phi;
-glm::vec3 cameraPosition;
-glm::vec3 ogLookAt; // for recentering the camera
-
+// keyboard status
 Scene* scene;
 GuiDataContainer* guiData;
 RenderState* renderState;
@@ -376,22 +376,14 @@ int main(int argc, char** argv)
     Camera& cam = renderState->camera;
     width = cam.resolution.x;
     height = cam.resolution.y;
+    defaultCameraPosition = cam.position;
 
-    glm::vec3 view = cam.view;
+    glm::vec3 forward = cam.forward;
     glm::vec3 up = cam.up;
-    glm::vec3 right = glm::cross(view, up);
-    up = glm::cross(right, view);
-
-    cameraPosition = cam.position;
-
-    // compute phi (horizontal) and theta (vertical) relative 3D axis
-    // so, (0 0 1) is forward, (0 1 0) is up
-    glm::vec3 viewXZ = glm::vec3(view.x, 0.0f, view.z);
-    glm::vec3 viewZY = glm::vec3(0.0f, view.y, view.z);
-    phi = glm::acos(glm::dot(glm::normalize(viewXZ), glm::vec3(0, 0, -1)));
-    theta = glm::acos(glm::dot(glm::normalize(viewZY), glm::vec3(0, 1, 0)));
-    ogLookAt = cam.lookAt;
-    zoom = glm::length(cam.position - ogLookAt);
+    glm::vec3 right = glm::cross(forward, up);
+    up = glm::cross(right, forward);
+    cam.up = up;
+    cam.right = right;
 
     // Initialize CUDA and GL components
     init();
@@ -434,25 +426,10 @@ void saveImage()
 
 void runCuda()
 {
-    if (camchanged)
+    if (redrawScene)
     {
         iteration = 0;
-        Camera& cam = renderState->camera;
-        cameraPosition.x = zoom * sin(phi) * sin(theta);
-        cameraPosition.y = zoom * cos(theta);
-        cameraPosition.z = zoom * cos(phi) * sin(theta);
-
-        cam.view = -glm::normalize(cameraPosition);
-        glm::vec3 v = cam.view;
-        glm::vec3 u = glm::vec3(0, 1, 0);//glm::normalize(cam.up);
-        glm::vec3 r = glm::cross(v, u);
-        cam.up = glm::cross(r, v);
-        cam.right = r;
-
-        cam.position = cameraPosition;
-        cameraPosition += cam.lookAt;
-        cam.position = cameraPosition;
-        camchanged = false;
+        redrawScene = false;
     }
 
     // Map OpenGL buffer object for writing from CUDA on a single GPU
@@ -492,6 +469,8 @@ void runCuda()
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
+    Camera& cam = renderState->camera;
+    glm::vec3 translation {0};
     if (action == GLFW_PRESS)
     {
         switch (key)
@@ -504,13 +483,43 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
                 saveImage();
                 break;
             case GLFW_KEY_SPACE:
-                camchanged = true;
-                renderState = &scene->state;
-                Camera& cam = renderState->camera;
-                cam.lookAt = ogLookAt;
+                cam.position = defaultCameraPosition;
+                pitch = 0;
+                yaw = 0;
                 break;
+            case GLFW_KEY_A:
+                redrawScene = true;
+                translation = -cam.right * camProp.speed_translation.x;
+                break;
+            case GLFW_KEY_D:
+                redrawScene = true;
+                translation = cam.right * camProp.speed_translation.x;
+                break;
+            case GLFW_KEY_E:
+                redrawScene = true;
+                translation = world_y * camProp.speed_translation.y;
+                break;
+            case GLFW_KEY_Q:
+                redrawScene = true;
+                translation = -world_y * camProp.speed_translation.y;
+                break;
+            case GLFW_KEY_W:
+                redrawScene = true;
+                translation = cam.forward * camProp.speed_translation.z;
+                translation.y = 0;
+                break;
+            case GLFW_KEY_S:
+                 redrawScene = true;
+                 translation = -cam.forward * camProp.speed_translation.z;
+                 translation.y = 0;
+                 break;
         }
+
+        cam.position += translation;
     }
+
+    
+
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -520,48 +529,49 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         return;
     }
 
-    leftMousePressed = (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS);
-    rightMousePressed = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
-    middleMousePressed = (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS);
+    mouseButtonPressing[GLFW_MOUSE_BUTTON_LEFT] = (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS);
+    mouseButtonPressing[GLFW_MOUSE_BUTTON_RIGHT] = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
+    mouseButtonPressing[GLFW_MOUSE_BUTTON_MIDDLE] = (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS);
+
 }
 
 void mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 {
-    if (xpos == lastX || ypos == lastY)
+    if (utilityCore::epsilonCheck(xpos, mouseLastX) && utilityCore::epsilonCheck(ypos, mouseLastY))
     {
         return; // otherwise, clicking back into window causes re-start
     }
 
-    if (leftMousePressed)
+    if (mouseButtonPressing[GLFW_MOUSE_BUTTON_RIGHT])
     {
-        // compute new camera parameters
-        phi -= (xpos - lastX) / width;
-        theta -= (ypos - lastY) / height;
-        theta = std::fmax(0.001f, std::fmin(theta, pi));
-        camchanged = true;
-    }
-    else if (rightMousePressed)
-    {
-        zoom += (ypos - lastY) / height * 4.0f;
-        zoom = std::fmax(0.1f, zoom);
-        camchanged = true;
-    }
-    else if (middleMousePressed)
-    {
-        renderState = &scene->state;
+        redrawScene = true;
+
         Camera& cam = renderState->camera;
-        glm::vec3 forward = cam.view;
-        forward.y = 0.0f;
-        forward = glm::normalize(forward);
-        glm::vec3 right = cam.right;
-        right.y = 0.0f;
-        right = glm::normalize(right);
+        float xDiff = static_cast<float>(xpos - mouseLastX) / float(width); // positive is right
+        float yDiff = static_cast<float>(ypos - mouseLastY) / float(height); // positive is down
 
-        cam.lookAt -= (float)(xpos - lastX) * right * 0.01f;
-        cam.lookAt += (float)(ypos - lastY) * forward * 0.01f;
-        camchanged = true;
+        yaw -= xDiff * camProp.speed_yaw;
+        float yaw_world = yaw + pi_over_2;
+
+        pitch -= yDiff * camProp.speed_pitch;
+        pitch = glm::clamp(pitch, camProp.pitch_min, camProp.pitch_max); 
+
+        glm::vec3 forward;
+        forward.x = glm::cos(pitch) * glm::cos(yaw_world);
+        forward.y = glm::sin(pitch);
+        forward.z = -glm::cos(pitch) * glm::sin(yaw_world);
+        
+        cam.forward = glm::normalize(forward);
+        cam.right = glm::normalize(glm::cross(cam.forward, world_y));
+        cam.up = glm::normalize(glm::cross(cam.right, cam.forward));
+
+        printf("ydiff: %f, xdiff: %f", yDiff, xDiff);
+        printf("CamStat:\n \t forward: %f %f %f \n"
+               "\t up: %f %f %f \n"
+               "\t right: %f %f %f \n", cam.forward.x, cam.forward.y, cam.forward.z, cam.right.x, cam.right.y, cam.right.z, cam.up.x, cam.up.y, cam.up.z);
     }
+    
 
-    lastX = xpos;
-    lastY = ypos;
+    mouseLastX = xpos;
+    mouseLastY = ypos;
 }

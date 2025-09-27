@@ -13,7 +13,8 @@
 
 // Numeric constants
 constexpr float pi = 3.1415926535897932384626422832795028841971f;
-constexpr float two_pi = 6.2831853071795864769252867665590057683943f;
+constexpr float two_pi = 2 * pi;
+constexpr float pi_over_2 = pi * 0.5;
 constexpr float epsilon = 0.00001f;
 
 class GuiDataContainer
@@ -28,7 +29,6 @@ namespace utilityCore
     extern float clamp(float f, float min, float max);
     extern bool replaceString(std::string& str, const std::string& from, const std::string& to);
     extern glm::vec3 clampRGB(glm::vec3 color);
-    extern bool epsilonCheck(float a, float b);
     extern std::vector<std::string> tokenizeString(std::string str);
     extern glm::mat4 buildTransformationMatrix(glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale);
     extern std::string convertIntToString(int number);
@@ -38,6 +38,12 @@ namespace utilityCore
     T divUp(T size, T div)
     {
         return (size + div - 1) / div;
+    }
+
+    template <class T, typename = std::enable_if_t<std::is_floating_point_v<T>>>
+    bool epsilonCheck(T a, T b)
+    {
+        return fabs(fabs(a) - fabs(b)) < epsilon;
     }
 }
 

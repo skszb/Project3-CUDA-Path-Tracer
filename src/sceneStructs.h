@@ -53,7 +53,7 @@ struct Camera
     glm::ivec2 resolution;
     glm::vec3 position;
     glm::vec3 lookAt;
-    glm::vec3 view;
+    glm::vec3 forward;
     glm::vec3 up;
     glm::vec3 right;
     glm::vec2 fov;
