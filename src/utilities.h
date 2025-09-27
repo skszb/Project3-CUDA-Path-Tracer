@@ -9,11 +9,12 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <type_traits>
 
-#define PI                3.1415926535897932384626422832795028841971f
-#define TWO_PI            6.2831853071795864769252867665590057683943f
-#define SQRT_OF_ONE_THIRD 0.5773502691896257645091487805019574556476f
-#define EPSILON           0.00001f
+// Numeric constants
+constexpr float pi = 3.1415926535897932384626422832795028841971f;
+constexpr float two_pi = 6.2831853071795864769252867665590057683943f;
+constexpr float epsilon = 0.00001f;
 
 class GuiDataContainer
 {
@@ -32,4 +33,11 @@ namespace utilityCore
     extern glm::mat4 buildTransformationMatrix(glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale);
     extern std::string convertIntToString(int number);
     extern std::istream& safeGetline(std::istream& is, std::string& t); //Thanks to http://stackoverflow.com/a/6089413
+
+    template <class T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    T divUp(T size, T div)
+    {
+        return (size + div - 1) / div;
+    }
 }
+

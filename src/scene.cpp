@@ -106,9 +106,9 @@ void Scene::loadFromJSON(const std::string& jsonName)
     camera.up = glm::vec3(up[0], up[1], up[2]);
 
     //calculate fov based on resolution
-    float yscaled = tan(fovy * (PI / 180));
+    float yscaled = tan(fovy * (pi / 180));
     float xscaled = (yscaled * camera.resolution.x) / camera.resolution.y;
-    float fovx = (atan(xscaled) * 180) / PI;
+    float fovx = (atan(xscaled) * 180) / pi;
     camera.fov = glm::vec2(fovx, fovy);
 
     camera.right = glm::normalize(glm::cross(camera.view, camera.up));

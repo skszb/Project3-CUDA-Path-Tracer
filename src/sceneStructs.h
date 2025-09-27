@@ -15,6 +15,7 @@ enum GeomType
     CUBE
 };
 
+
 struct Ray
 {
     glm::vec3 origin;
@@ -72,6 +73,7 @@ struct PathSegment
 {
     Ray ray;
     glm::vec3 color;
+    glm::vec3 throughput;   // the accumulated BSDF attenuation
     int pixelIndex;
     int remainingBounces;
 };
@@ -85,3 +87,25 @@ struct ShadeableIntersection
   glm::vec3 surfaceNormal;
   int materialId;
 };
+
+
+/* -------------------------- Light -------------------------- */
+// temporary solution TODO zb: use own data instead
+struct AreaLight
+{
+    Geom geom;
+};
+
+struct PointLight
+{
+    glm::vec3 translation;
+};
+
+class SceneLights
+{
+    std::vector<AreaLight> areaLights;
+    std::vector<PointLight> pointLight;
+
+};
+
+

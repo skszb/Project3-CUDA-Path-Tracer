@@ -1,6 +1,6 @@
 #include "glslUtility.hpp"
 #include "image.h"
-#include "pathtrace.h"
+#include "PathTrace/pathtrace.h"
 #include "scene.h"
 #include "sceneStructs.h"
 #include "utilities.h"
@@ -25,6 +25,20 @@
 #include <string>
 
 static std::string startTimeString;
+
+static struct ControlState
+{
+
+    // mouse status
+    bool leftMousePressed = false;
+    bool rightMousePressed = false;
+    bool middleMousePressed = false;
+
+    double mouseLastX;
+    double mouseLastY;
+
+    // 
+} UserControlState;
 
 // For camera controls
 static bool leftMousePressed = false;
@@ -486,7 +500,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
                 saveImage();
                 glfwSetWindowShouldClose(window, GL_TRUE);
                 break;
-            case GLFW_KEY_S:
+            case GLFW_KEY_P:
                 saveImage();
                 break;
             case GLFW_KEY_SPACE:
@@ -523,12 +537,12 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
         // compute new camera parameters
         phi -= (xpos - lastX) / width;
         theta -= (ypos - lastY) / height;
-        theta = std::fmax(0.001f, std::fmin(theta, PI));
+        theta = std::fmax(0.001f, std::fmin(theta, pi));
         camchanged = true;
     }
     else if (rightMousePressed)
     {
-        zoom += (ypos - lastY) / height;
+        zoom += (ypos - lastY) / height * 4.0f;
         zoom = std::fmax(0.1f, zoom);
         camchanged = true;
     }

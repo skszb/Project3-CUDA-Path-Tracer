@@ -1,8 +1,9 @@
 #include "interactions.h"
 
-#include "utilities.h"
+#include "pathTraceUtils.h"
 
 #include <thrust/random.h>
+
 
 __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(
     glm::vec3 normal,
@@ -54,4 +55,10 @@ __host__ __device__ void scatterRay(
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
+
+    Ray& ray = pathSegment.ray;
+    glm::vec3 randomDirection = calculateRandomDirectionInHemisphere(normal, rng);
+    ray.direction = randomDirection;
+    ray.origin = intersect;
 }
+

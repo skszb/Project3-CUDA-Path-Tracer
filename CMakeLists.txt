@@ -50,13 +50,17 @@ include_directories(${GLM_INCLUDE_DIRS})
 
 set(headers
     src/image.h
-    src/interactions.h
-    src/intersections.h
     src/glslUtility.hpp
-    src/pathtrace.h
     src/scene.h
     src/sceneStructs.h
     src/utilities.h
+    src/PathTrace/pathtrace.h
+    src/PathTrace/interactions.h
+    src/PathTrace/intersections.h
+    src/PathTrace/bsdf.h
+    src/PathTrace/light.h
+    src/PathTrace/sampleWarping.h
+    src/PathTrace/pathTraceUtils.h
 )
 
 set(sources
@@ -64,11 +68,15 @@ set(sources
     src/stb.cpp
     src/image.cpp
     src/glslUtility.cpp
-    src/pathtrace.cu
-    src/intersections.cu
-    src/interactions.cu
     src/scene.cpp
     src/utilities.cpp
+    src/PathTrace/pathtrace.cu
+    src/PathTrace/intersections.cu
+    src/PathTrace/interactions.cu
+    src/PathTrace/bsdf.cu
+    src/PathTrace/light.cu
+    src/PathTrace/sampleWarping.cu
+    src/PathTrace/pathTraceUtils.cu
 )
 
 set(imgui_headers
@@ -98,8 +106,9 @@ list(SORT sources)
 list(SORT imgui_headers)
 list(SORT imgui_sources)
 
-source_group("Headers" FILES ${headers})
-source_group("Sources" FILES ${sources})
+# source_group("Headers" FILES ${headers})
+# source_group("Sources" FILES ${sources})
+source_group(TREE ${CMAKE_SOURCE_DIR}/src PREFIX src FILES ${sources} ${headers})
 source_group("ImGui\\Headers" FILES ${imgui_headers})
 source_group("ImGui\\Sources" FILES ${imgui_sources})
 
@@ -107,6 +116,11 @@ source_group("ImGui\\Sources" FILES ${imgui_sources})
 #add_subdirectory(stream_compaction)  # TODO: uncomment if using your stream compaction
 
 add_executable(${CMAKE_PROJECT_NAME} ${sources} ${headers} ${imgui_sources} ${imgui_headers})
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GL_LIBRARIES}
     #stream_compaction  # TODO: uncomment if using your stream compaction
