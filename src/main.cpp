@@ -564,11 +564,6 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
         cam.forward = glm::normalize(forward);
         cam.right = glm::normalize(glm::cross(cam.forward, world_y));
         cam.up = glm::normalize(glm::cross(cam.right, cam.forward));
-
-        printf("ydiff: %f, xdiff: %f", yDiff, xDiff);
-        printf("CamStat:\n \t forward: %f %f %f \n"
-               "\t up: %f %f %f \n"
-               "\t right: %f %f %f \n", cam.forward.x, cam.forward.y, cam.forward.z, cam.right.x, cam.right.y, cam.right.z, cam.up.x, cam.up.y, cam.up.z);
     }
     
 

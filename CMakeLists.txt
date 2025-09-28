@@ -48,6 +48,15 @@ set(GLM_ROOT_DIR "${CMAKE_SOURCE_DIR}/external")
 find_package(GLM REQUIRED)
 include_directories(${GLM_INCLUDE_DIRS})
 
+# TinyGLTF library
+add_library(tinygltf STATIC
+    external/include/tinygltf/tiny_gltf.cc
+)
+
+target_include_directories(tinygltf PUBLIC
+    ${CMAKE_SOURCE_DIR}/external/include/tinygltf
+)
+
 set(headers
     src/image.h
     src/glslUtility.hpp
@@ -123,6 +132,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     ${GL_LIBRARIES}
+    tinygltf
     #stream_compaction  # TODO: uncomment if using your stream compaction
 )
 set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
