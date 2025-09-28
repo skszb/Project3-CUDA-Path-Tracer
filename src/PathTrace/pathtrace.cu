@@ -6,9 +6,6 @@
 #include <__msvc_filebuf.hpp>
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
-#include <thrust/remove.h>
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
 #include <thrust/partition.h>
 
 
@@ -157,20 +154,44 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
-    if (x < cam.resolution.x && y < cam.resolution.y) {
-        int index = x + (y * cam.resolution.x);
+    bool jitter = true;
+
+    int index = x + (y * cam.resolution.x);
+    thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 1); // TODO: depth = 0 creates artifacts of black seams on the sphere, need to figure out later
+    thrust::uniform_real_distribution<float> u01(0, 1);
+
+    if (x < cam.resolution.x && y < cam.resolution.y)
+    {
         PathSegment& segment = pathSegments[index];
 
         segment.pixelIndex = index;
         segment.remainingBounces = traceDepth;
-        segment.color = glm::vec3(0);  
+        segment.color = glm::vec3(0);
         segment.throughput = glm::vec3(1);
 
         segment.ray.origin = cam.position;
 
-        // TODO: implement antialiasing by jittering the ray
-        segment.ray.direction = glm::normalize(cam.forward - cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f) - cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f)
-        );
+        float pixel_x_local;
+        float pixel_y_local;
+         
+        if (jitter)
+        {
+            pixel_x_local = u01(rng);
+            pixel_y_local = u01(rng);
+        }
+        else
+        {
+            pixel_x_local = 0.5f;
+            pixel_y_local = 0.5f;
+        }
+        float pixel_x_world = (float)x + pixel_x_local - (float)cam.resolution.x * 0.5f;
+        float pixel_y_world = (float)y + pixel_y_local - (float)cam.resolution.y * 0.5f;
+
+
+        segment.ray.direction = glm::normalize(cam.forward
+            - cam.right * cam.pixelLength.x * pixel_x_world     // TODO: it's subtraction here, but it works, will come back later
+            - cam.up * cam.pixelLength.y * pixel_y_world);
+
     }
 }
 
@@ -407,7 +428,6 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_intersections
         );
         checkCUDAError("trace one bounce");
-        cudaDeviceSynchronize();
 
         // shading
         shadeFakeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
@@ -419,11 +439,10 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             depth
         );
         checkCUDAError("shade material");
-        cudaDeviceSynchronize();
 
         // compact
-        /*PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, bounce_more_than<0>());
-        num_paths = a - dev_paths;*/
+        PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, bounce_more_than<0>());
+        num_paths = a - dev_paths;
         // fprintf(stdout, "depth: %i, num_paths: %i\n", depth, num_paths);
 
 
@@ -443,6 +462,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     finalGather<<<numBlocksPixels, blockSize1d>>>(pixelcount, dev_image, dev_paths);
 
     ///////////////////////////////////////////////////////////////////////////
+    cudaDeviceSynchronize();
 
     // Send results to OpenGL buffer for rendering
     sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_image);
