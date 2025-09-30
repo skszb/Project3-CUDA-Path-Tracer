@@ -32,7 +32,9 @@ static bool redrawScene = true;
 // Camera
 static struct
 {
-    const glm::vec3 speed_translation {1,1,1};
+    glm::vec3 speed_translations[3]{ glm::vec3(0.25f), glm::vec3(0.5f), glm::vec3(1.0f) };
+    int speedIdx = 1;
+    glm::vec3 speed_translation = speed_translations[1];
     const float speed_yaw = 1;
     const float speed_pitch = 1;
 
@@ -55,6 +57,8 @@ double mouseLastX;
 double mouseLastY;
 
 // keyboard status
+bool keyButtonPressing[97];
+
 Scene* scene;
 GuiDataContainer* guiData;
 RenderState* renderState;
@@ -313,6 +317,49 @@ bool MouseOverImGuiWindow()
     return mouseOverImGuiWinow;
 }
 
+void MoveCamera()
+{
+    Camera& cam = renderState->camera;
+
+    glm::vec3 translation{ 0 };
+
+    if (keyButtonPressing[GLFW_KEY_A])
+    {
+        redrawScene = true;
+        translation += -cam.right * camProp.speed_translation.x;
+    }
+    if (keyButtonPressing[GLFW_KEY_D])
+    {
+        redrawScene = true;
+        translation += cam.right * camProp.speed_translation.x;
+    }
+
+    if (keyButtonPressing[GLFW_KEY_E])
+    {
+        redrawScene = true;
+        translation += world_y * camProp.speed_translation.y;
+    }
+    if (keyButtonPressing[GLFW_KEY_Q])
+    {
+        redrawScene = true;
+        translation += -world_y * camProp.speed_translation.y;
+    }
+    if (keyButtonPressing[GLFW_KEY_W])
+    {
+        redrawScene = true;
+        glm::vec3 tD = cam.forward;
+        tD.y = 0;
+        translation += glm::normalize(tD) * camProp.speed_translation.z;
+    }
+    if (keyButtonPressing[GLFW_KEY_S])
+    {
+        redrawScene = true;
+        glm::vec3 tD = -cam.forward;
+        tD.y = 0;
+        translation += glm::normalize(tD) * camProp.speed_translation.z;
+    }
+    cam.position += translation;
+}
 void mainLoop()
 {
     while (!glfwWindowShouldClose(window))
@@ -338,6 +385,8 @@ void mainLoop()
         RenderImGui();
 
         glfwSwapBuffers(window);
+
+        MoveCamera();
     }
 
     ImGui_ImplOpenGL3_Shutdown();
@@ -366,7 +415,7 @@ int main(int argc, char** argv)
 
     // Load scene file
     scene = new Scene(sceneFile);
-
+    scene->loadFromGLTF("../gltfScenes/SimpleMeshes/glTF/SimpleMeshes.gltf");
     //Create Instance for ImGUIData
     guiData = new GuiDataContainer();
 
@@ -470,7 +519,6 @@ void runCuda()
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     Camera& cam = renderState->camera;
-    glm::vec3 translation {0};
     if (action == GLFW_PRESS)
     {
         switch (key)
@@ -487,39 +535,19 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
                 pitch = 0;
                 yaw = 0;
                 break;
-            case GLFW_KEY_A:
-                redrawScene = true;
-                translation = -cam.right * camProp.speed_translation.x;
-                break;
-            case GLFW_KEY_D:
-                redrawScene = true;
-                translation = cam.right * camProp.speed_translation.x;
-                break;
-            case GLFW_KEY_E:
-                redrawScene = true;
-                translation = world_y * camProp.speed_translation.y;
-                break;
-            case GLFW_KEY_Q:
-                redrawScene = true;
-                translation = -world_y * camProp.speed_translation.y;
-                break;
-            case GLFW_KEY_W:
-                redrawScene = true;
-                translation = cam.forward * camProp.speed_translation.z;
-                translation.y = 0;
-                break;
-            case GLFW_KEY_S:
-                 redrawScene = true;
-                 translation = -cam.forward * camProp.speed_translation.z;
-                 translation.y = 0;
-                 break;
         }
-
-        cam.position += translation;
+        if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z)
+        {
+            keyButtonPressing[key] = true;
+        }
     }
-
-    
-
+    else if (action == GLFW_RELEASE)
+    {
+        if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z)
+        {
+            keyButtonPressing[key] = false;
+        }
+    }
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
@@ -533,6 +561,11 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     mouseButtonPressing[GLFW_MOUSE_BUTTON_RIGHT] = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
     mouseButtonPressing[GLFW_MOUSE_BUTTON_MIDDLE] = (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS);
 
+    if (mouseButtonPressing[GLFW_MOUSE_BUTTON_MIDDLE])
+    {
+        camProp.speedIdx = (camProp.speedIdx + 1) % 3;
+        camProp.speed_translation = camProp.speed_translations[camProp.speedIdx];
+    }
 }
 
 void mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
@@ -565,7 +598,6 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
         cam.right = glm::normalize(glm::cross(cam.forward, world_y));
         cam.up = glm::normalize(glm::cross(cam.right, cam.forward));
     }
-    
 
     mouseLastX = xpos;
     mouseLastY = ypos;
