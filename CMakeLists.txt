@@ -50,12 +50,16 @@ include_directories(${GLM_INCLUDE_DIRS})
 
 # TinyGLTF library
 add_library(tinygltf STATIC
+    external/include/tinygltf/tiny_gltf.h
     external/include/tinygltf/tiny_gltf.cc
 )
 
 target_include_directories(tinygltf PUBLIC
+    ${CMAKE_SOURCE_DIR}/external/include
     ${CMAKE_SOURCE_DIR}/external/include/tinygltf
+
 )
+
 
 set(headers
     src/image.h
@@ -74,7 +78,6 @@ set(headers
 
 set(sources
     src/main.cpp
-    src/stb.cpp
     src/image.cpp
     src/glslUtility.cpp
     src/scene.cpp
