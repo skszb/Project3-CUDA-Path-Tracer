@@ -14,7 +14,7 @@ public:
     std::vector<Material> materials;
 
     
-
+    void loadFromGLTF(const std::string& gltfName);
 
     RenderState state;
 };

@@ -138,4 +138,9 @@ std::istream& utilityCore::safeGetline(std::istream& is, std::string& t)
     }
 }
 
-
+std::string utilityCore::GetFilePathExtension(const std::string& fileName)
+{
+    if (fileName.find_last_of(".") != std::string::npos)
+        return fileName.substr(fileName.find_last_of(".") + 1);
+    return "";
+}

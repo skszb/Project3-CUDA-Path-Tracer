@@ -10,7 +10,7 @@ using glm::vec2;
 
 
 /* -------- math --------- */
-__host__ __device__
+__device__
 vec3 squareToDiskConcentric(vec2 xi)
 {
     vec2 remapXi = xi * 2.0f - vec2(1.0);
@@ -24,7 +24,7 @@ vec3 squareToDiskConcentric(vec2 xi)
             return vec3(0);
         }
         r = remapXi.x;
-        theta = remapXi.y / remapXi.x * PI / 4.0;
+        theta = remapXi.y / remapXi.x * PI * 0.25f;
     }
     else
     {
@@ -33,13 +33,13 @@ vec3 squareToDiskConcentric(vec2 xi)
             return vec3(0);
         }
         r = remapXi.y;
-        theta = (PI / 2) - (remapXi.x / remapXi.y * PI / 4.0);
+        theta = (PI / 2) - (remapXi.x / remapXi.y * PI * 0.25f);
     }
         
     return vec3(cos(theta) * r, sin(theta) * r, 0);
 }
 
-__host__ __device__
+__device__
 vec3 squareToHemisphereCosine(vec2 xi)
 {
     vec3 d = squareToDiskConcentric(xi);
@@ -47,7 +47,7 @@ vec3 squareToHemisphereCosine(vec2 xi)
     return vec3(d.x, d.y, z);
 }
 
-__host__ __device__
+__device__
 float squareToHemisphereCosinePDF(vec3 sample)
 {
     // sample.z is cosine theta (in object space)

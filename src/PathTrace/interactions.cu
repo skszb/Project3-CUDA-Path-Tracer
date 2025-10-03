@@ -5,7 +5,8 @@
 #include <thrust/random.h>
 
 
-__host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(
+__device__
+glm::vec3 calculateRandomDirectionInHemisphere(
     glm::vec3 normal,
     thrust::default_random_engine &rng)
 {
@@ -45,7 +46,8 @@ __host__ __device__ glm::vec3 calculateRandomDirectionInHemisphere(
         + sin(around) * over * perpendicularDirection2;
 }
 
-__host__ __device__ void scatterRay(
+__device__
+void scatterRay(
     PathSegment & pathSegment,
     glm::vec3 intersect,
     glm::vec3 normal,

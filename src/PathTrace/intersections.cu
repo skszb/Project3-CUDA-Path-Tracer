@@ -1,6 +1,9 @@
 #include "intersections.h"
+#include "pathTraceUtils.h"
 
-__host__ __device__ float boxIntersectionTest(
+using glm::vec3;
+
+__device__ float boxIntersectionTest(
     Geom box,
     Ray r,
     glm::vec3 &intersectionPoint,
@@ -38,7 +41,6 @@ __host__ __device__ float boxIntersectionTest(
             }
         }
     }
-
     if (tmax >= tmin && tmax > 0)
     {
         outside = true;
@@ -56,7 +58,7 @@ __host__ __device__ float boxIntersectionTest(
     return -1;
 }
 
-__host__ __device__ float sphereIntersectionTest(
+__device__ float sphereIntersectionTest(
     Geom sphere,
     Ray r,
     glm::vec3 &intersectionPoint,
@@ -111,3 +113,49 @@ __host__ __device__ float sphereIntersectionTest(
 
     return glm::length(r.origin - intersectionPoint);
 }
+
+
+__device__ bool triangleIntersectionTest(glm::vec3& intersectionPoint, glm::vec3& normal, float& t, vec3& barycentric,
+    const Geom& triangle,  Ray r,
+    glm::vec3 va, glm::vec3 vb, glm::vec3 vc, const float t_min = EPSILON, const float t_max = 10000)
+{
+    vec3 o = multiplyMV(triangle.inverseTransform, glm::vec4(r.origin, 1.0f));
+    vec3 D = glm::normalize(multiplyMV(triangle.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    vec3 E1 = vb - va;
+    vec3 E2 = vc - va;
+    vec3 D_cross_E2 = glm::cross(D, E2);
+
+    float det = glm::dot(E1, D_cross_E2);
+    if (epsilonCheck(det, 0.0f))
+        return false;
+
+    float inv_det = 1.0f / det; // __fdividef(1, det);
+
+    // u
+    vec3 T = o - va;
+    float u = glm::dot(T, D_cross_E2) * inv_det;
+    if (u < 0.0f || u > 1.0f)
+        return false;
+
+    // v
+    vec3 Q = glm::cross(T, E1);
+    float v = glm::dot(D, Q) * inv_det;
+    if (v < 0.0f || (u+v) > 1.0f)
+        return false;
+
+    // t
+    t = glm::dot(E2, Q) * inv_det;
+    if(t < t_min || t > t_max)
+        return false;
+
+    barycentric = vec3(1 - u - v, u, v);
+    intersectionPoint = o + t * D;
+    normal = glm::cross(E1, E2);
+    // TODO: normal mapping?
+
+    // TODO: backface test
+    return true;
+}
+    
+
+    

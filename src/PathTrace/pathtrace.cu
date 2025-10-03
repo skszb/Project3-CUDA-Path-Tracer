@@ -7,14 +7,14 @@
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/partition.h>
-
+#include "utilities.h"
 
 #include "sceneStructs.h"
 #include "scene.h"
 #include "glm/glm.hpp"
-#include "glm/gtx/norm.hpp"
 #include "pathTraceUtils.h"
 #include "intersections.h"
+#include "ImGui/imgui.h"
 #include "PathTrace/bsdf.h"
 
 #define ERRORCHECK 1
@@ -218,7 +218,9 @@ __global__ void computeIntersections(
         glm::vec3 normal;
         float t_min = FLT_MAX;
         int hit_geom_index = -1;
+
         bool outside = true;
+        bool tmp_outside = true;
 
         glm::vec3 tmp_intersect;
         glm::vec3 tmp_normal;
@@ -231,11 +233,11 @@ __global__ void computeIntersections(
 
             if (geom.type == CUBE)
             {
-                t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
             }
             else if (geom.type == SPHERE)
             {
-                t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+                t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
             }
             // TODO: add more intersection tests here... triangle? metaball? CSG?
 
@@ -247,6 +249,7 @@ __global__ void computeIntersections(
                 hit_geom_index = i;
                 intersect_point = tmp_intersect;
                 normal = tmp_normal;
+                outside = tmp_outside;
             }
         }
 
@@ -260,6 +263,7 @@ __global__ void computeIntersections(
             intersections[path_index].t = t_min;
             intersections[path_index].materialId = geoms[hit_geom_index].materialid;
             intersections[path_index].surfaceNormal = normal;
+            intersections[path_index].outside = outside;
         }
     }
 }
@@ -283,10 +287,8 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
     if (idx >= num_paths) { return; }
 
     ShadeableIntersection intersection = shadeableIntersections[idx];
-    PathSegment& segment = pathSegments[idx];
-
+    PathSegment segment = pathSegments[idx];
     if (segment.remainingBounces < 0) {return;} // do one more calculation when bounce reaches zero
-
     if (intersection.t > 0.0f) // if the intersection exists...
     {
       // Set up the RNG
@@ -297,59 +299,81 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
 
         Material material = materials[intersection.materialId];
         vec3 materialColor = material.color;
-
+        vec3 normal = intersection.surfaceNormal;
         // If the material indicates that the object was a light, "light" the ray
         if (material.emittance > 0.0f) {
-            segment.color =  materialColor * material.emittance * segment.throughput;
+            segment.color = materialColor * material.emittance * segment.throughput;
             segment.remainingBounces = 0;
-
         } 
+        /*if (!material.hasRefractive)
+        {
+            segment.color = materialColor;
+            segment.remainingBounces = 0;
+        }*/
+        /*else if (material.hasRefractive)
+        {
+            vec3 f; vec3 wiW; float pdf;
+            vec3 debug;
+            f = sample_f(debug, wiW, pdf, -segment.ray.direction, material, normal, intersection.outside, rng);
+
+            segment.color = f;
+            segment.color_debug = debug;
+            segment.remainingBounces = 0;
+        }*/
         else 
         {
             vec3 intersectionPos = getPointOnRay(segment.ray, intersection.t);
-            /*scatterRay(segment, intersectionPos, intersection.surfaceNormal, material, rng);
-            // vec3 reflectDir = glm::reflect(segment.ray.direction, intersection.surfaceNormal);
-            float lambert = dot(intersection.surfaceNormal, segment.ray.direction);
-            
-            vec3 bsdf = material.color * INV_PI;    
-            float pdf = 1;
-            segment.throughput *= bsdf * __fdividef(lambert, pdf);*/
 
-            float pdf;
-            vec3 wiW;
-            vec3 f = sample_diffuse(wiW, pdf, material, intersection.surfaceNormal, rng);
-            float lambert = dot(wiW, intersection.surfaceNormal);
-            segment.throughput *= f * __fdividef(lambert, pdf);
+            vec3 f; vec3 wiW; float pdf;
+            vec3 debug;
+            f = sample_f(debug, wiW, pdf, -segment.ray.direction, material, normal, intersection.outside, rng);
+            wiW = glm::normalize(wiW);
+            float absCosThetaI = abs(dot(wiW, normal));
+            segment.throughput *= f * absCosThetaI / pdf; // __fdividef(absCosTheta, pdf)
+            segment.color_debug = debug;
 
             // update next 
-            segment.ray.origin = intersectionPos;
+            segment.ray.origin = intersectionPos + wiW * 0.01f; // fix self-intersection
             segment.ray.direction = wiW;
-            segment.remainingBounces -= 1;
 
-            // DEBUG
+            segment.remainingBounces -= 1;
         }
-        // If there was no intersection, color the ray black.
-        // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
-        // used for opacity, in which case they can indicate "no opacity".
-        // This can be useful for post-processing and image compositing.
     }
     else {
-        pathSegments[idx].color = vec3(0.0f);
+        segment.color = vec3(0.0f);
         segment.remainingBounces = 0;
     }
+    pathSegments[idx] = segment;
+
 }
 
 // Add the current iteration's output to the overall image
-__global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iterationPaths)
+__global__ void finalGather(int nPaths, glm::vec3* image, PathSegment* iterationPaths, const bool showDebugColor)
 {
     int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
     if (index < nPaths)
     {
         PathSegment iterationPath = iterationPaths[index];
-        image[iterationPath.pixelIndex] += iterationPath.color;
+        if (!showDebugColor)
+        {
+            image[iterationPath.pixelIndex] += iterationPath.color;
+        }
+        else
+        {
+            image[iterationPath.pixelIndex] += iterationPath.color_debug;
+        }
     }
 }
+
+struct thread_is_active
+{
+    __device__
+        auto operator()(const PathSegment& seg) -> bool
+    {
+        return seg.remainingBounces > 0 && glm::length(seg.throughput) > EPSILON;
+    }
+};
 
 /**
  * Wrapper for the __global__ call that sets up the kernel calls and does a ton
@@ -441,15 +465,13 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         checkCUDAError("shade material");
 
         // compact
-        PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, bounce_more_than<0>());
-        num_paths = a - dev_paths;
+        /*PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
+        num_paths = a - dev_paths;*/
         // fprintf(stdout, "depth: %i, num_paths: %i\n", depth, num_paths);
-
 
         depth++;
         if (num_paths < 1) iterationComplete = true;
-        if (depth > 8) iterationComplete = true;
-
+        if (depth >= 8) iterationComplete = true;
 
         if (guiData != NULL)
         {
@@ -459,7 +481,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
 
     // Assemble this iteration and apply it to the image
     dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
-    finalGather<<<numBlocksPixels, blockSize1d>>>(pixelcount, dev_image, dev_paths);
+    finalGather<<<numBlocksPixels, blockSize1d>>>(pixelcount, dev_image, dev_paths, guiData->ShowDebugColor);
 
     ///////////////////////////////////////////////////////////////////////////
     cudaDeviceSynchronize();

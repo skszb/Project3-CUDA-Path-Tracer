@@ -2,7 +2,6 @@
 
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
-#include "sceneStructs.h"
 
 // Numeric constants
 #define PI           3.14159265358979323846f
@@ -18,45 +17,26 @@
 
 #define EPSILON      0.00001f
 
+#define COLOR_DEBUG (glm::vec3(1.0f, 0.0f, 1.0f)) 
 
 
 // Functions
-__host__ __device__
+__device__
 void coordinateSystem(glm::vec3 v1, glm::vec3& v2, glm::vec3& v3);
 
-__host__ __device__
+__device__
 glm::mat3 localToWorld(glm::vec3 nor);
 
-__host__ __device__
+__device__
 glm::mat3 worldToLocal(glm::vec3 nor);
- 
 
-
-template <int V>
-struct bounce_less_than
+__device__
+inline bool epsilonCheck(float a, float b)
 {
-    __host__ __device__
-    auto operator()(const PathSegment& seg) -> bool
-    {
-        return seg.remainingBounces < V;
-    }
-};
+    return fabs(a - b) < EPSILON;
+}
 
-template <int V>
-struct bounce_more_than
-{
-    __host__ __device__
-        auto operator()(const PathSegment& seg) -> bool
-    {
-        return seg.remainingBounces > V;
-    }
-};
+__device__ float absCosTheta(glm::vec3 wi);
 
-struct should_terminate_thread
-{
-    __host__ __device__
-        auto operator()(const PathSegment& seg) -> bool
-    {
-        return seg.remainingBounces < 1;
-    }
-};
+
+

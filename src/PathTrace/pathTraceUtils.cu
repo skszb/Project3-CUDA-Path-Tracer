@@ -1,6 +1,6 @@
 #include "pathTraceUtils.h"
 
-__host__ __device__
+__device__
 void coordinateSystem(glm::vec3 v1, glm::vec3& v2, glm::vec3& v3)
 {
     if (abs(v1.x) > abs(v1.y))
@@ -10,7 +10,7 @@ void coordinateSystem(glm::vec3 v1, glm::vec3& v2, glm::vec3& v3)
     v3 = glm::cross(v1, v2);
 }
 
-__host__ __device__
+__device__
 glm::mat3 localToWorld(glm::vec3 nor)
 {
     glm::vec3 tan, bit;
@@ -18,9 +18,13 @@ glm::mat3 localToWorld(glm::vec3 nor)
     return glm::mat3{ tan, bit, nor };
 }
 
-__host__ __device__
+__device__
 glm::mat3 worldToLocal(glm::vec3 nor)
 {
     return glm::transpose(localToWorld(nor));
 }
 
+__device__ float absCosTheta(glm::vec3 wi)
+{
+    return glm::abs(wi.z);
+}

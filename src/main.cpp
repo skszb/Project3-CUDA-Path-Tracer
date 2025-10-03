@@ -32,7 +32,7 @@ static bool redrawScene = true;
 // Camera
 static struct
 {
-    glm::vec3 speed_translations[3]{ glm::vec3(0.25f), glm::vec3(0.5f), glm::vec3(1.0f) };
+    glm::vec3 speed_translations[2]{ glm::vec3(0.1f), glm::vec3(0.5f)};
     int speedIdx = 1;
     glm::vec3 speed_translation = speed_translations[1];
     const float speed_yaw = 1;
@@ -306,6 +306,11 @@ void RenderImGui()
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
 
+    ImGui::Begin("Settings");
+    ImGui::Checkbox("Enable Debug", &imguiData->ShowDebugColor);
+    ImGui::End();
+
+
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -415,7 +420,7 @@ int main(int argc, char** argv)
 
     // Load scene file
     scene = new Scene(sceneFile);
-    scene->loadFromGLTF("../gltfScenes/SimpleMeshes/glTF/SimpleMeshes.gltf");
+    // scene->loadFromGLTF("../gltfScenes/SimpleMeshes/glTF/SimpleMeshes.gltf");
     //Create Instance for ImGUIData
     guiData = new GuiDataContainer();
 
@@ -563,7 +568,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
     if (mouseButtonPressing[GLFW_MOUSE_BUTTON_MIDDLE])
     {
-        camProp.speedIdx = (camProp.speedIdx + 1) % 3;
+        camProp.speedIdx = (camProp.speedIdx + 1) % 2;
         camProp.speed_translation = camProp.speed_translations[camProp.speedIdx];
     }
 }

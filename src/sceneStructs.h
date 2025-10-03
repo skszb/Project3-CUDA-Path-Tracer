@@ -1,7 +1,4 @@
 #pragma once
-
-#include <cuda_runtime.h>
-
 #include "glm/glm.hpp"
 
 #include <string>
@@ -37,11 +34,6 @@ struct Geom
 struct Material
 {
     glm::vec3 color;
-    struct
-    {
-        float exponent;
-        glm::vec3 color;
-    } specular;
     float hasReflective;
     float hasRefractive;
     float indexOfRefraction;
@@ -74,8 +66,10 @@ struct PathSegment
     Ray ray;
     glm::vec3 color;
     glm::vec3 throughput;   // the accumulated BSDF attenuation
+    glm::vec3 color_debug;
     int pixelIndex;
     int remainingBounces;
+    int prevMaterialID;
 };
 
 // Use with a corresponding PathSegment to do:
@@ -83,9 +77,10 @@ struct PathSegment
 // 2) BSDF evaluation: generate a new ray
 struct ShadeableIntersection
 {
-  float t;
-  glm::vec3 surfaceNormal;
-  int materialId;
+    float t;
+    glm::vec3 surfaceNormal;
+    int materialId;
+    bool outside; 
 };
 
 

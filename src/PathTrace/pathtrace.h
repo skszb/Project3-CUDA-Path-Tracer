@@ -1,8 +1,8 @@
 #pragma once
+#include <vector_types.h>
 
-#include "scene.h"
-#include "utilities.h"
-
+class GuiDataContainer;
+class Scene;
 void InitDataContainer(GuiDataContainer* guiData);
 void pathtraceInit(Scene *scene);
 void pathtraceFree();

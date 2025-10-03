@@ -5,7 +5,7 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtx/string_cast.hpp>
 #include "json.hpp"
-#include <tiny_gltf.h>
+#include "tiny_gltf.h"
 
 #include <fstream>
 #include <iostream>
@@ -59,6 +59,14 @@ void Scene::loadFromJSON(const std::string& jsonName)
         {
             const auto& col = p["RGB"];
             newMaterial.color = glm::vec3(col[0], col[1], col[2]);
+            newMaterial.hasReflective = true;
+        }
+        else if (p["TYPE"] == "Transparent")
+        {
+            const auto& col = p["RGB"];
+            newMaterial.color = glm::vec3(col[0], col[1], col[2]);
+            newMaterial.hasRefractive = true;
+            newMaterial.indexOfRefraction = p["IOR"];
         }
         MatNameToID[name] = materials.size();
         materials.emplace_back(newMaterial);
@@ -123,3 +131,72 @@ void Scene::loadFromJSON(const std::string& jsonName)
     state.image.resize(arraylen);
     std::fill(state.image.begin(), state.image.end(), glm::vec3());
 }
+
+
+// gltf
+
+
+void Scene::loadFromGLTF(const std::string& gltfName)
+{
+    
+    using namespace tinygltf;
+    using tinygltf::Model;
+    using tinygltf::TinyGLTF;
+
+    Model model;
+    TinyGLTF loader;
+    std::string err;
+    std::string warn;
+
+    // Parse gltf scene
+    bool parseComplete = false;
+    string ext = utilityCore::GetFilePathExtension(gltfName);
+    if (ext == "gltf")
+    {
+        parseComplete = loader.LoadASCIIFromFile(&model, &err, &warn, gltfName);
+    }
+    else if (ext == "glb")
+    {
+        parseComplete = loader.LoadBinaryFromFile(&model, &err, &warn, gltfName);
+    }
+    else
+    {
+        printf("Invalid file extension, need \"gltf\" or \"gltf\". \n");
+        return;
+    }
+
+    if (!warn.empty())
+    {
+        printf("Warn: %s\n", warn.c_str());
+    }
+
+    if (!err.empty())
+    {
+        printf("Err: %s\n", err.c_str());
+    }
+
+    if (!parseComplete)
+    {
+        printf("Failed to parse glTF\n");
+        throw std::runtime_error("Failed to parse glTF\n");
+    }
+
+
+    // parse data
+
+    // TODO: 
+    // nodes
+    // meshes
+
+    // accessors
+    // bufferViews
+    // buffers
+
+    // materials
+    // light
+    // textures
+    // images
+
+}
+
+
