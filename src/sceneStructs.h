@@ -114,7 +114,7 @@ struct Mesh
     Mesh() : id(-1)
     {
         bound.min = glm::vec3(FLT_MAX);
-        bound.max = glm::vec3(FLT_MIN);
+        bound.max = glm::vec3(-FLT_MAX);
     }
     int id;
     std::vector<glm::vec3> positions;

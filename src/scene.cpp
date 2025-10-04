@@ -420,5 +420,7 @@ void ProcessNode(const tinygltf::Model& model, int nodeIdx, const glm::mat4& par
 void Scene::addDefaultScene()
 {
     string filePath = "../scenes/cornelldbEmpty.json";
+    printf("Loading the default scene at\"%s\"...", filePath.c_str());
     loadFromJSON(filePath);
+    printf("Complete!\n");
 }

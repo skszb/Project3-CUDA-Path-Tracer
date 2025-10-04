@@ -436,7 +436,7 @@ int main(int argc, char** argv)
         int triangleCount = scene->meshes[geom.meshId].indices.size() / 3;
         Material& mat = scene->materials[meshMatID];
         printf("Finished loading glTF scene: {%d} triangles\n", triangleCount);
-        printf("Geom matID: [%d]= {%f, %f, %f}", meshMatID, mat.color.r, mat.color.g, mat.color.b);
+        printf("Geom matID: [%d]= {%f, %f, %f}\n\n", meshMatID, mat.color.r, mat.color.g, mat.color.b);
     }
     //Create Instance for ImGUIData
     guiData = new GuiDataContainer();

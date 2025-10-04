@@ -74,6 +74,7 @@ set(headers
     src/PathTrace/light.h
     src/PathTrace/sampleWarping.h
     src/PathTrace/pathTraceUtils.h
+    src/bvh.h
 )
 
 set(sources
@@ -89,6 +90,7 @@ set(sources
     src/PathTrace/light.cu
     src/PathTrace/sampleWarping.cu
     src/PathTrace/pathTraceUtils.cu
+    src/bvh.cpp
 )
 
 set(imgui_headers
