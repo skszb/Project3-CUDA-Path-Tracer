@@ -88,6 +88,65 @@ vec3 sample_specular_refract(vec3&debug, vec3& wi_world, float& pdf,  vec3 wo_wo
 }
 
 
+__device__ void btdfSample(glm::vec3& debug, bool outside, glm::vec3& outBSDF, float& outPDF, Ray& out_wi, glm::vec3 ViewDir, glm::vec3 p,
+    glm::vec3 surfaceNormal, glm::vec2 uv, const Material& material,
+    thrust::default_random_engine& rng)
+{
+    outBSDF = glm::vec3(1.0f);
+    outPDF = 1.f;
+
+    //glm::vec3 wo_Tangent, tanX_World, tanZ_World, N = outside ? surfaceNormal : -surfaceNormal;
+    //tanZ_World = glm::normalize(glm::cross(ViewDir, N));
+    //tanX_World = glm::normalize(glm::cross(N, tanZ_World));
+    //wo_Tangent.x = glm::dot(ViewDir, tanX_World);
+    //wo_Tangent.z = glm::dot(ViewDir, tanZ_World);
+    //wo_Tangent.y = glm::dot(ViewDir, N);
+    //wo_Tangent = glm::normalize(wo_Tangent);
+    //float SinTheta1 = wo_Tangent.x;
+    //glm::vec3 wi_Tangent;
+    //float eta = outside ? ETA : 1.f / ETA;
+    //wi_Tangent.x = -eta * SinTheta1;
+    //if (abs(wi_Tangent.x)>=1.0f)
+    //{
+    //    // retract a little bit so no self intersect
+    //    out_wi.origin = p + 0.0001f * N;
+    //    out_wi.direction = - glm::reflect(ViewDir, N);
+    //    return;
+    //}
+    //wi_Tangent.y = -sqrt(1.f - wi_Tangent.x * wi_Tangent.x);
+    //wi_Tangent.z = 0.f;
+    //glm::vec3 wi_World = wi_Tangent.x * tanX_World + wi_Tangent.y * N + wi_Tangent.z * tanZ_World;
+    //out_wi.direction = wi_World;
+    //if (outside)
+    //{
+    //    out_wi.origin = p - 0.001f * surfaceNormal; // minus at least this value
+    //}
+    //else
+    //{
+    //    out_wi.origin = p + 0.001f * surfaceNormal;
+    //}
+
+    glm::vec3 N = outside ? surfaceNormal : -surfaceNormal;
+    // march a little bit when passing through surface
+    if (outside)
+    {
+        out_wi.direction = glm::refract(-ViewDir, N, ETA);
+        out_wi.origin = p - 0.001f * surfaceNormal; // minus at least this value
+    }
+    else
+    {
+        out_wi.direction = glm::refract(-ViewDir, N, 1.f / ETA);
+        out_wi.origin = p + 0.001f * surfaceNormal;
+    }
+    if (glm::length(out_wi.direction) == 0.f)
+    {
+        // retract a little bit so no self intersect
+        out_wi.origin = p + 0.0001f * N;
+        out_wi.direction = -glm::reflect(ViewDir, N);
+        return;
+    }
+}
+
 __device__
 glm::vec3 sample_f(glm::vec3& debug, glm::vec3& wi_world, float& pdf,
                               glm::vec3 wo_world, const Material& material, glm::vec3 normal_world, bool outside, thrust::default_random_engine& rng)
