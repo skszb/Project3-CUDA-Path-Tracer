@@ -1,5 +1,7 @@
 #pragma once
 
+#include <crt/host_defines.h>
+
 #include "sceneStructs.h"
 
 #include <glm/glm.hpp>

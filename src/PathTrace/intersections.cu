@@ -11,8 +11,8 @@ __device__ float boxIntersectionTest(
     bool &outside)
 {
     Ray q;
-    q.origin    =                multiplyMV(box.inverseTransform, glm::vec4(r.origin   , 1.0f));
-    q.direction = glm::normalize(multiplyMV(box.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    q.origin    =                multiplyMV(box.invTransform, glm::vec4(r.origin   , 1.0f));
+    q.direction = glm::normalize(multiplyMV(box.invTransform, glm::vec4(r.direction, 0.0f)));
 
     float tmin = -1e38f;
     float tmax = 1e38f;
@@ -67,8 +67,8 @@ __device__ float sphereIntersectionTest(
 {
     float radius = .5;
 
-    glm::vec3 ro = multiplyMV(sphere.inverseTransform, glm::vec4(r.origin, 1.0f));
-    glm::vec3 rd = glm::normalize(multiplyMV(sphere.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    glm::vec3 ro = multiplyMV(sphere.invTransform, glm::vec4(r.origin, 1.0f));
+    glm::vec3 rd = glm::normalize(multiplyMV(sphere.invTransform, glm::vec4(r.direction, 0.0f)));
 
     Ray rt;
     rt.origin = ro;
@@ -105,7 +105,7 @@ __device__ float sphereIntersectionTest(
     glm::vec3 objspaceIntersection = getPointOnRay(rt, t);
 
     intersectionPoint = multiplyMV(sphere.transform, glm::vec4(objspaceIntersection, 1.f));
-    normal = glm::normalize(multiplyMV(sphere.invTranspose, glm::vec4(objspaceIntersection, 0.f)));
+    normal = glm::normalize(multiplyMV(sphere.invTransform, glm::vec4(objspaceIntersection, 0.f)));
     if (!outside)
     {
         normal = -normal;
@@ -115,19 +115,20 @@ __device__ float sphereIntersectionTest(
 }
 
 
-__device__ bool triangleIntersectionTest(glm::vec3& intersectionPoint, glm::vec3& normal, float& t, vec3& barycentric,
-    const Geom& triangle,  Ray r,
-    glm::vec3 va, glm::vec3 vb, glm::vec3 vc, const float t_min = EPSILON, const float t_max = 10000)
+__device__ float triangleIntersectionTest(
+    const Geom& geom, Ray r,
+    glm::vec3 va, glm::vec3 vb, glm::vec3 vc, 
+    glm::vec3& intersectionPoint, glm::vec3& barycentric)
 {
-    vec3 o = multiplyMV(triangle.inverseTransform, glm::vec4(r.origin, 1.0f));
-    vec3 D = glm::normalize(multiplyMV(triangle.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    vec3 o = multiplyMV(geom.invTransform, glm::vec4(r.origin, 1.0f));
+    vec3 D = glm::normalize(multiplyMV(geom.invTranspose, glm::vec4(r.direction, 0.0f)));
     vec3 E1 = vb - va;
     vec3 E2 = vc - va;
     vec3 D_cross_E2 = glm::cross(D, E2);
 
     float det = glm::dot(E1, D_cross_E2);
     if (epsilonCheck(det, 0.0f))
-        return false;
+        return -1;
 
     float inv_det = 1.0f / det; // __fdividef(1, det);
 
@@ -135,27 +136,104 @@ __device__ bool triangleIntersectionTest(glm::vec3& intersectionPoint, glm::vec3
     vec3 T = o - va;
     float u = glm::dot(T, D_cross_E2) * inv_det;
     if (u < 0.0f || u > 1.0f)
-        return false;
+        return -1;
 
     // v
     vec3 Q = glm::cross(T, E1);
     float v = glm::dot(D, Q) * inv_det;
     if (v < 0.0f || (u+v) > 1.0f)
-        return false;
+        return -1;
 
     // t
-    t = glm::dot(E2, Q) * inv_det;
-    if(t < t_min || t > t_max)
-        return false;
+    float t = glm::dot(E2, Q) * inv_det;
+    if(t < 0.0f)
+        return -1;
 
     barycentric = vec3(1 - u - v, u, v);
-    intersectionPoint = o + t * D;
-    normal = glm::cross(E1, E2);
-    // TODO: normal mapping?
+    glm::vec3 objspaceIntersection = o + D * t;
 
-    // TODO: backface test
+    intersectionPoint = multiplyMV(geom.transform, glm::vec4(objspaceIntersection, 1.f));
+
+    return glm::length(r.origin - intersectionPoint);
+}
+
+
+__device__ float meshIntersectionTest(
+    const Geom& geom,
+    const glm::vec3* positions, int triangleCount,
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside)
+{
+    float t_min = FLT_MAX;
+    glm::vec3 barycentric;
+    glm::vec3 vb_va;
+    glm::vec3 vc_va;
+
+    for (int tri = 0; tri < triangleCount; ++tri)
+    {
+        const glm::vec3 va = positions[3 * tri + 0];
+        const glm::vec3 vb = positions[3 * tri + 1];
+        const glm::vec3 vc = positions[3 * tri + 2];
+
+        float tmp_t;
+        glm::vec3 tmp_barycentric;
+        glm::vec3 tmp_itsc;
+
+
+        tmp_t = triangleIntersectionTest(geom, r, va, vb, vc, tmp_itsc, tmp_barycentric);
+        if (tmp_t > 0 && tmp_t < t_min)
+        {
+            t_min = tmp_t;
+            barycentric = tmp_barycentric;
+            intersectionPoint = tmp_itsc;
+            vb_va = vb - va;
+            vc_va = vc - va;
+        }
+    }
+
+    if (!(t_min < FLT_MAX))
+        return -1;
+
+    // flip normal to face the incident
+    normal = glm::normalize(glm::cross(vb_va, vc_va));
+    outside = glm::dot(normal, r.direction) < 0;
+
+    // TODO: normal mapping
+
+    if (!outside)
+        normal = -normal;
+
+    return glm::length(intersectionPoint - r.origin);
+}
+
+
+__device__ bool aabbIntersectionTest(const Geom& mesh, AABB aabb, Ray r)
+{
+    Ray rt {
+        multiplyMV(mesh.invTransform, glm::vec4(r.origin, 1.0f)),
+        glm::normalize(multiplyMV(mesh.invTransform, glm::vec4(r.direction, 0.0f)))
+    };
+
+    float tmin = -FLT_MAX;
+    float tmax = FLT_MAX;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        float invD = 1.0f / rt.direction[i];
+        float t0 = (aabb.min[i] - rt.origin[i]) * invD;
+        float t1 = (aabb.max[i] - rt.origin[i]) * invD;
+        if (invD < 0.0f)
+        {
+            float tmp = t0;
+            t0 = t1;
+            t1 = tmp;
+        }
+        tmin = fmaxf(tmin, t0);
+        tmax = fminf(tmax, t1);
+        if (tmax < tmin)
+            return false;
+    }
     return true;
 }
-    
-
-    

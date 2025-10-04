@@ -410,17 +410,34 @@ int main(int argc, char** argv)
 {
     startTimeString = currentTimeString();
 
-    if (argc < 2)
+    if (argc < 3)
     {
-        printf("Usage: %s SCENEFILE.json\n", argv[0]);
+        printf("Usage: %s [-g/-j] SCENEFILE.json\n", argv[0]);
         return 1;
     }
 
-    const char* sceneFile = argv[1];
-
+    std::string loadMode = argv[1];
+    const char* sceneFile = argv[2];
     // Load scene file
-    scene = new Scene(sceneFile);
-    // scene->loadFromGLTF("../gltfScenes/SimpleMeshes/glTF/SimpleMeshes.gltf");
+    scene = new Scene();
+
+    scene->addDefaultScene(); // TODO: del
+    
+    if (loadMode == "-j")
+    {
+        scene->loadFromJSON(sceneFile);
+    }
+    else if (loadMode == "-g")
+    {
+        scene->loadFromGLTF(sceneFile, false);
+
+        Geom& geom = *scene->geoms.rbegin();
+        int meshMatID = geom.materialId;
+        int triangleCount = scene->meshes[geom.meshId].indices.size() / 3;
+        Material& mat = scene->materials[meshMatID];
+        printf("Finished loading glTF scene: {%d} triangles\n", triangleCount);
+        printf("Geom matID: [%d]= {%f, %f, %f}", meshMatID, mat.color.r, mat.color.g, mat.color.b);
+    }
     //Create Instance for ImGUIData
     guiData = new GuiDataContainer();
 

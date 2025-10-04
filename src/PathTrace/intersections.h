@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sceneStructs.h"
-
 #include <glm/glm.hpp>
 #include <glm/gtx/intersect.hpp>
 
@@ -37,6 +36,7 @@ __host__ __device__ inline glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v)
     return glm::vec3(m * v);
 }
 
+
 // CHECKITOUT
 /**
  * Test intersection between a ray and a transformed cube. Untransformed,
@@ -54,6 +54,7 @@ __device__ float boxIntersectionTest(
     glm::vec3& normal,
     bool& outside);
 
+
 // CHECKITOUT
 /**
  * Test intersection between a ray and a transformed sphere. Untransformed,
@@ -70,3 +71,25 @@ __device__ float sphereIntersectionTest(
     glm::vec3& intersectionPoint,
     glm::vec3& normal,
     bool& outside);
+
+
+// Test ray triangle
+__device__ float triangleIntersectionTest(
+    const Geom& geom, Ray r,
+    glm::vec3 va, glm::vec3 vb, glm::vec3 vc,
+    glm::vec3& intersectionPoint, glm::vec3& barycentric);
+
+
+__device__ float meshIntersectionTest(
+    const Geom& geom,
+    const glm::vec3* positions, int triangleCount,
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside);
+
+
+__device__ bool aabbIntersectionTest(
+    const Geom& mesh,
+    AABB aabb,
+    Ray r);

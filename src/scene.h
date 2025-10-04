@@ -6,15 +6,18 @@
 class Scene
 {
 private:
-    void loadFromJSON(const std::string& jsonName);
 public:
+    Scene() = default;
     Scene(std::string filename);
 
     std::vector<Geom> geoms;
     std::vector<Material> materials;
+    std::vector<Mesh> meshes;
+    std::vector<AABB> meshBounds;
 
-    
-    void loadFromGLTF(const std::string& gltfName);
+    void loadFromJSON(const std::string& jsonName);
+    void loadFromGLTF(const std::string& gltfName, bool fullReload);
 
+    void addDefaultScene();
     RenderState state;
 };

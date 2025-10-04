@@ -20,7 +20,14 @@
 #define COLOR_DEBUG (glm::vec3(1.0f, 0.0f, 1.0f)) 
 
 
-// Functions
+__device__
+inline bool epsilonCheck(float a, float b)
+{
+    return fabs(a - b) < EPSILON;
+}
+
+
+// Functions (tangent space, (tangent, bitangent, normal))
 __device__
 void coordinateSystem(glm::vec3 v1, glm::vec3& v2, glm::vec3& v3);
 
@@ -31,12 +38,5 @@ __device__
 glm::mat3 worldToLocal(glm::vec3 nor);
 
 __device__
-inline bool epsilonCheck(float a, float b)
-{
-    return fabs(a - b) < EPSILON;
-}
-
-__device__ float absCosTheta(glm::vec3 wi);
-
-
+bool sameHemisphere(glm::vec3 w, glm::vec3 wp);
 

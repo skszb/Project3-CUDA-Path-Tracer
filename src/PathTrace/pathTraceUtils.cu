@@ -24,7 +24,8 @@ glm::mat3 worldToLocal(glm::vec3 nor)
     return glm::transpose(localToWorld(nor));
 }
 
-__device__ float absCosTheta(glm::vec3 wi)
+__device__
+bool sameHemisphere(glm::vec3 w, glm::vec3 wp)
 {
-    return glm::abs(wi.z);
+    return w.z * wp.z > 0;
 }
