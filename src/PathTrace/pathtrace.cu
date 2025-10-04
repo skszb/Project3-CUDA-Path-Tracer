@@ -305,11 +305,11 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
             segment.color = materialColor * material.emittance * segment.throughput;
             segment.remainingBounces = 0;
         } 
-        /*if (!material.hasRefractive)
+        if (!material.hasRefractive)
         {
             segment.color = materialColor;
             segment.remainingBounces = 0;
-        }*/
+        }
         /*else if (material.hasRefractive)
         {
             vec3 f; vec3 wiW; float pdf;

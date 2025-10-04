@@ -124,14 +124,14 @@
         {
             "TYPE":"cube",
             "MATERIAL":"transparent_white",
-            "TRANS":[10,10,-10],
+            "TRANS":[0,15,0],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[8.0,8.0,8.0]
         },
         {
             "TYPE":"sphere",
             "MATERIAL":"transparent_white",
-            "TRANS":[-15,10,-15],
+            "TRANS":[-10,10,-10],
             "ROTAT":[0.0,0.0,0.0],
             "SCALE":[8.0,8.0,8.0]
         }
