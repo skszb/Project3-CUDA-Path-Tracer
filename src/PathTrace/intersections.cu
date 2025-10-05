@@ -237,3 +237,109 @@ __device__ bool aabbIntersectionTest(const Geom& mesh, AABB aabb, Ray r)
     }
     return true;
 }
+
+
+__device__ float leafNodeIntersectionTest(
+    const Geom& geom,
+    const glm::vec3* positions, 
+    const int* triangleIndices,
+    int triangleCount,
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside)
+{
+    float t_min = FLT_MAX;
+    glm::vec3 barycentric;
+    glm::vec3 vb_va;
+    glm::vec3 vc_va;
+
+    for (int tri = 0; tri < triangleCount; ++tri)
+    {
+        int triangleBufferIdx = triangleIndices[tri];
+        const glm::vec3 va = positions[triangleBufferIdx + 0];
+        const glm::vec3 vb = positions[triangleBufferIdx + 1];
+        const glm::vec3 vc = positions[triangleBufferIdx + 2];
+
+        float tmp_t;
+        glm::vec3 tmp_barycentric;
+        glm::vec3 tmp_itsc;
+
+
+        tmp_t = triangleIntersectionTest(geom, r, va, vb, vc, tmp_itsc, tmp_barycentric);
+        if (tmp_t > 0 && tmp_t < t_min)
+        {
+            t_min = tmp_t;
+            barycentric = tmp_barycentric;
+            intersectionPoint = tmp_itsc;
+            vb_va = vb - va;
+            vc_va = vc - va;
+        }
+    }
+
+    if (t_min == FLT_MAX)
+        return -1;
+
+    // flip normal to face the incident
+    normal = glm::normalize(glm::cross(vb_va, vc_va));
+    outside = glm::dot(normal, r.direction) < 0;
+
+    // TODO: normal mapping
+
+    if (!outside)
+        normal = -normal;
+
+    return glm::length(intersectionPoint - r.origin);
+}
+
+
+__device__ float bvhIntersectionTest(
+    const Geom& geom,
+    // bvh
+    const NodeProxy* node,
+    const glm::vec3* positions,
+    const int* triangleIndices,
+
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside)
+{
+    bool itsc = aabbIntersectionTest(geom, node->bound, r);
+    if (!itsc)
+        return -1;
+
+    if (node->triangleCount > 0)
+    {
+        return leafNodeIntersectionTest(geom, positions, triangleIndices + node->triangleBufferOffset, node->triangleCount, r, intersectionPoint, normal, outside);
+    }
+
+    float t_min = FLT_MAX;
+
+    float tmp_t;
+    vec3 tmp_itscPos;
+    vec3 tmp_nor;
+    bool tmp_outside;
+
+    tmp_t = bvhIntersectionTest(geom, &node[node->leftChildIdx], positions, triangleIndices, r,
+        tmp_itscPos, tmp_nor, tmp_outside);
+    if (tmp_t > 0.f &&  t_min > tmp_t)
+    {
+        t_min = tmp_t;
+        intersectionPoint = tmp_itscPos;
+        normal = tmp_nor;
+        outside = tmp_outside;
+    }
+
+    tmp_t = bvhIntersectionTest(geom, &node[node->rightChildIdx], positions, triangleIndices, r,
+        tmp_itscPos, tmp_nor, tmp_outside);
+    if (tmp_t > 0.f && t_min > tmp_t)
+    {
+        t_min = tmp_t;
+        intersectionPoint = tmp_itscPos;
+        normal = tmp_nor;
+        outside = tmp_outside;
+    }
+
+    return t_min != FLT_MAX ? t_min : -1;
+}

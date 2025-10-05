@@ -471,6 +471,8 @@ int main(int argc, char** argv)
 
 void saveImage()
 {
+    gatherImageFromDevice();
+
     float samples = iteration;
     // output image file
     Image img(width, height);

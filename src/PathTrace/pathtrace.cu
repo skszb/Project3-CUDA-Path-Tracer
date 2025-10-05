@@ -16,6 +16,8 @@
 #include "intersections.h"
 #include "ImGui/imgui.h"
 #include "PathTrace/bsdf.h"
+#include "bvh.h"
+
 
 #define ERRORCHECK 1
 
@@ -89,10 +91,15 @@ static PathSegment* dev_activePaths = nullptr;
 // TODO:  multi mesh support
 static Mesh* hst_singleMesh = NULL;
 static int hst_singleMeshTriangleCount;
+static std::vector<glm::vec3> hst_positions;
+
 static AABB* dev_singleMeshAABB = NULL;
 static glm::vec3* dev_singleMeshPosition = NULL;
 // static glm::vec3 dev_mesh_normals;
 // static glm::vec2 dev_mesh_uvs;
+
+static NodeProxy* dev_nodes;
+static int* dev_nodeTriangles;
 
 /* ------------------ Light ------------------ */
 static AreaLight* dev_areaLights;
@@ -137,19 +144,31 @@ void pathtraceInit(Scene* scene)
         hst_singleMesh = &scene->meshes[0];
 
         // Position
-        std::vector<glm::vec3> positionBuffer;
         for (int index : hst_singleMesh->indices)
         {
-            positionBuffer.push_back(hst_singleMesh->positions.at(index));
+            hst_positions.push_back(hst_singleMesh->positions.at(index));
         }
-        hst_singleMeshTriangleCount = positionBuffer.size() / 3;
-        cudaMalloc(&dev_singleMeshPosition, positionBuffer.size() * sizeof(glm::vec3));   // TODO:  multi mesh support
-        cudaMemcpy(dev_singleMeshPosition, positionBuffer.data(), hst_singleMesh->indices.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+        hst_singleMeshTriangleCount = hst_positions.size() / 3;
+        cudaMalloc(&dev_singleMeshPosition, hst_positions.size() * sizeof(glm::vec3));   // TODO:  multi mesh support
+        cudaMemcpy(dev_singleMeshPosition, hst_positions.data(), hst_singleMesh->indices.size() * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 
         // AABB
         cudaMalloc(&dev_singleMeshAABB, sizeof(AABB));
         cudaMemcpy(dev_singleMeshAABB, &hst_singleMesh->bound, sizeof(AABB), cudaMemcpyHostToDevice);
     }
+
+    // BVH
+    auto root = buildBvhFromPositionBuffer(hst_positions);
+    std::vector<NodeProxy> nodePorxies;
+    std::vector<int> nodeTriangles;
+    buildNodeProxyBuffers(root, nodePorxies, nodeTriangles);
+
+    cudaMalloc(&dev_nodes, nodePorxies.size() * sizeof(NodeProxy));
+    cudaMemcpy(dev_nodes, nodePorxies.data(), nodePorxies.size() * sizeof(NodeProxy), cudaMemcpyHostToDevice);
+
+    cudaMalloc(&dev_nodeTriangles, nodeTriangles.size() * sizeof(int));
+    cudaMemcpy(dev_nodeTriangles, nodeTriangles.data(), nodeTriangles.size() * sizeof(int), cudaMemcpyHostToDevice);
+
 
     // Debug buffers
     host_paths = new PathSegment[pixelcount];
@@ -170,6 +189,8 @@ void pathtraceFree()
     // Mesh data
     cudaFree(dev_singleMeshPosition);
     cudaFree(dev_singleMeshAABB);
+    cudaFree(dev_nodes);
+    cudaFree(dev_nodeTriangles);
 
     // debug 
     delete[] host_paths;
@@ -242,6 +263,8 @@ __global__ void computeIntersections(
     Geom* geoms,
     int geoms_size,
     const glm::vec3* meshPositions,
+    const NodeProxy* nodes,
+    const int* triangleIndices,
     int meshTriangleCount,
     const AABB* meshBound,
     ShadeableIntersection* intersections)
@@ -283,8 +306,10 @@ __global__ void computeIntersections(
                 AABB aabb = meshBound[0]; 
                 if (aabbIntersectionTest(geom, aabb, pathSegment.ray))
                 {
-                    t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
-                        pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
+                    /*t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
+                        pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);*/
+
+                    t = bvhIntersectionTest(geom, nodes, meshPositions, triangleIndices, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
                 }
                 else
                 {
@@ -501,6 +526,8 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_geoms,
             hst_scene->geoms.size(),
             dev_singleMeshPosition,
+            dev_nodes,
+            dev_nodeTriangles,
             hst_singleMeshTriangleCount,
             dev_singleMeshAABB,
             dev_intersections
@@ -537,15 +564,17 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
     finalGather<<<numBlocksPixels, blockSize1d>>>(pixelcount, dev_image, dev_paths, guiData->ShowDebugColor);
 
-    ///////////////////////////////////////////////////////////////////////////
-    cudaDeviceSynchronize();
-
     // Send results to OpenGL buffer for rendering
     sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_image);
 
-    // Retrieve image from GPU
-    cudaMemcpy(hst_scene->state.image.data(), dev_image,
-        pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+
 
     checkCUDAError("pathtrace");
+}
+
+void gatherImageFromDevice()
+{
+    int pixelcount = hst_scene->state.camera.resolution.x * hst_scene->state.camera.resolution.y;
+    // Retrieve image from GPU
+    cudaMemcpy(hst_scene->state.image.data(), dev_image, pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 }

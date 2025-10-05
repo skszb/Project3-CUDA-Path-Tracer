@@ -3,6 +3,7 @@
 #include "sceneStructs.h"
 #include <glm/glm.hpp>
 #include <glm/gtx/intersect.hpp>
+#include "bvh.h"
 
 
 /**
@@ -93,3 +94,15 @@ __device__ bool aabbIntersectionTest(
     const Geom& mesh,
     AABB aabb,
     Ray r);
+
+__device__ float bvhIntersectionTest(
+    const Geom& geom,
+    // bvh
+    const NodeProxy* node,
+    const glm::vec3* positions,
+    const int* triangleIndices,
+
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside);

@@ -105,6 +105,27 @@ struct AABB
 {
     glm::vec3 min;
     glm::vec3 max;
+
+    AABB() : min({FLT_MAX}), max(-FLT_MAX) {}
+
+
+    void include(AABB aabb)
+    {
+        min = glm::min(min, aabb.min);
+        max = glm::max(max, aabb.max);
+    }
+
+    void include(glm::vec3 v)
+    {
+        min = glm::min(min, v);
+        max = glm::max(max, v);
+    }
+
+    void reset()
+    {
+        min = glm::vec3{ FLT_MAX };
+        max = glm::vec3{ -FLT_MAX };
+    }
 };
 
 /* -------------------------- Mesh -------------------------- */
@@ -113,8 +134,7 @@ struct Mesh
 {
     Mesh() : id(-1)
     {
-        bound.min = glm::vec3(FLT_MAX);
-        bound.max = glm::vec3(-FLT_MAX);
+        bound.reset();
     }
     int id;
     std::vector<glm::vec3> positions;
