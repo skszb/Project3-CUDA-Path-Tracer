@@ -327,13 +327,19 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
             vec3 f; vec3 wiW; float pdf;
             vec3 debug;
             f = sample_f(debug, wiW, pdf, -segment.ray.direction, material, normal, intersection.outside, rng);
+
+            segment.color_debug = debug;
             wiW = glm::normalize(wiW);
             float absCosThetaI = abs(dot(wiW, normal));
             segment.throughput *= f * absCosThetaI / pdf; // __fdividef(absCosTheta, pdf)
-            segment.color_debug = debug;
 
-            // update next 
-            segment.ray.origin = intersectionPos + wiW * 0.01f; // fix self-intersection
+            // update next
+            if (materials->hasRefractive)
+            {
+                intersectionPos += -normal * 0.001f;
+            }
+            
+            segment.ray.origin = intersectionPos + wiW * 0.001f; // fix self-intersection
             segment.ray.direction = wiW;
 
             segment.remainingBounces -= 1;

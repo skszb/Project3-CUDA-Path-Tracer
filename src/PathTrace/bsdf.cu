@@ -4,6 +4,7 @@
 #include "sampleWarping.h"
 #include "pathTraceUtils.h"
 #include "sceneStructs.h"
+#include "cuda_runtime_api.h"
 
 using glm::vec3;
 using glm::vec2;
@@ -87,6 +88,10 @@ vec3 sample_specular_refract(vec3&debug, vec3& wi_world, float& pdf,  vec3 wo_wo
     return material.color / glm::dot(wi_world, normal_i);
 }
 
+__device__ bool isNan(glm::vec3 x)
+{
+    return x.x!=x.x|| x.y != x.y|| x.z != x.z;
+}
 
 __device__ void btdfSample(glm::vec3& debug, bool outside, glm::vec3& outBSDF, float& outPDF, Ray& out_wi, glm::vec3 ViewDir, glm::vec3 p,
     glm::vec3 surfaceNormal, glm::vec2 uv, const Material& material,
@@ -94,62 +99,64 @@ __device__ void btdfSample(glm::vec3& debug, bool outside, glm::vec3& outBSDF, f
 {
     outBSDF = glm::vec3(1.0f);
     outPDF = 1.f;
-
-    //glm::vec3 wo_Tangent, tanX_World, tanZ_World, N = outside ? surfaceNormal : -surfaceNormal;
-    //tanZ_World = glm::normalize(glm::cross(ViewDir, N));
-    //tanX_World = glm::normalize(glm::cross(N, tanZ_World));
-    //wo_Tangent.x = glm::dot(ViewDir, tanX_World);
-    //wo_Tangent.z = glm::dot(ViewDir, tanZ_World);
-    //wo_Tangent.y = glm::dot(ViewDir, N);
-    //wo_Tangent = glm::normalize(wo_Tangent);
-    //float SinTheta1 = wo_Tangent.x;
-    //glm::vec3 wi_Tangent;
-    //float eta = outside ? ETA : 1.f / ETA;
-    //wi_Tangent.x = -eta * SinTheta1;
-    //if (abs(wi_Tangent.x)>=1.0f)
-    //{
-    //    // retract a little bit so no self intersect
-    //    out_wi.origin = p + 0.0001f * N;
-    //    out_wi.direction = - glm::reflect(ViewDir, N);
-    //    return;
-    //}
-    //wi_Tangent.y = -sqrt(1.f - wi_Tangent.x * wi_Tangent.x);
-    //wi_Tangent.z = 0.f;
-    //glm::vec3 wi_World = wi_Tangent.x * tanX_World + wi_Tangent.y * N + wi_Tangent.z * tanZ_World;
-    //out_wi.direction = wi_World;
-    //if (outside)
-    //{
-    //    out_wi.origin = p - 0.001f * surfaceNormal; // minus at least this value
-    //}
-    //else
-    //{
-    //    out_wi.origin = p + 0.001f * surfaceNormal;
-    //}
-
-    glm::vec3 N = outside ? surfaceNormal : -surfaceNormal;
-    // march a little bit when passing through surface
+    float ETA = 1.f / 1.5f;
+    glm::vec3 wo_Tangent, tanX_World, tanZ_World, N  = surfaceNormal;
+    tanZ_World = glm::normalize(glm::cross(ViewDir, N));
+    tanX_World = glm::normalize(glm::cross(N, tanZ_World));
+    wo_Tangent.x = glm::dot(ViewDir, tanX_World);
+    wo_Tangent.z = glm::dot(ViewDir, tanZ_World);
+    wo_Tangent.y = glm::dot(ViewDir, N);
+    wo_Tangent = glm::normalize(wo_Tangent);
+    float SinTheta1 = wo_Tangent.x;
+    glm::vec3 wi_Tangent;
+    float eta = outside ? ETA : 1.f / ETA;
+    wi_Tangent.x = -eta * SinTheta1;
+    if (abs(wi_Tangent.x)>=1.0f)
+    {
+        // retract a little bit so no self intersect
+        out_wi.origin = p + 0.0001f * N;
+        out_wi.direction = - glm::reflect(ViewDir, N);
+        return;
+    }
+    wi_Tangent.y = -sqrt(1.f - wi_Tangent.x * wi_Tangent.x);
+    wi_Tangent.z = 0.f;
+    glm::vec3 wi_World = wi_Tangent.x * tanX_World + wi_Tangent.y * N + wi_Tangent.z * tanZ_World;
+    out_wi.direction = wi_World;
     if (outside)
     {
-        out_wi.direction = glm::refract(-ViewDir, N, ETA);
         out_wi.origin = p - 0.001f * surfaceNormal; // minus at least this value
     }
     else
     {
-        out_wi.direction = glm::refract(-ViewDir, N, 1.f / ETA);
         out_wi.origin = p + 0.001f * surfaceNormal;
     }
-    if (glm::length(out_wi.direction) == 0.f)
-    {
-        // retract a little bit so no self intersect
-        out_wi.origin = p + 0.0001f * N;
-        out_wi.direction = -glm::reflect(ViewDir, N);
-        return;
-    }
+    //ViewDir = glm::normalize(ViewDir);
+    //
+    //glm::vec3 N = surfaceNormal;
+    //N = glm::normalize(N);
+    //// march a little bit when passing through surface
+    //float ETA = 1.f / 1.5f;
+    //if (outside)
+    //{
+    //    out_wi.direction = glm::refract(-ViewDir, N, ETA);
+    //}
+    //else
+    //{
+    //    out_wi.direction = glm::refract(-ViewDir, N, 1.f / ETA);
+    //}
+    //debug = ViewDir + 0.5f;
+    //if (isNan(out_wi.direction) || glm::length(out_wi.direction) == 0.f)
+    //{
+    //    // retract a little bit so no self intersect
+    //    out_wi.direction = -glm::reflect(ViewDir, N);
+    //}
+
 }
 
 __device__
 glm::vec3 sample_f(glm::vec3& debug, glm::vec3& wi_world, float& pdf,
-                              glm::vec3 wo_world, const Material& material, glm::vec3 normal_world, bool outside, thrust::default_random_engine& rng)
+                              glm::vec3 wo_world, const Material& material, glm::vec3 normal_world, bool outside, 
+    thrust::default_random_engine& rng)
 {
     if (material.hasReflective)
     {
@@ -157,7 +164,7 @@ glm::vec3 sample_f(glm::vec3& debug, glm::vec3& wi_world, float& pdf,
     }
     else if (material.hasRefractive)
     {
-#if 1
+#if 0
         pdf = 1;
         // acquire the direction of the ray
         const glm::vec3 direction{ -glm::normalize(wo_world) };
@@ -202,6 +209,15 @@ glm::vec3 sample_f(glm::vec3& debug, glm::vec3& wi_world, float& pdf,
             spectrum = 2.0f *  material.color * fresnel / glm::abs(glm::dot(wi_world, normal_world));
         }*/
         return spectrum;
+#else
+        vec3 f;
+        Ray r;
+        vec3 itsc;
+        btdfSample(debug, outside, f, pdf, r, wo_world, itsc, normal_world, vec2(0), material, rng);
+
+        pdf = 1;
+        wi_world = r.direction;
+        return f / glm::abs(glm::dot(normal_world, r.direction));
 #endif
 
     }
