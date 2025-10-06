@@ -85,8 +85,6 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 
-static PathSegment* dev_activePaths = nullptr;
-
 /* ------------------ Mesh ------------------ */
 // TODO:  multi mesh support
 static Mesh* hst_singleMesh = NULL;
@@ -98,8 +96,8 @@ static glm::vec3* dev_singleMeshPosition = NULL;
 // static glm::vec3 dev_mesh_normals;
 // static glm::vec2 dev_mesh_uvs;
 
-static NodeProxy* dev_nodes;
-static int* dev_nodeTriangles;
+static NodeProxy* dev_nodes = NULL;
+static int* dev_nodeTriangles = NULL;
 
 /* ------------------ Light ------------------ */
 static AreaLight* dev_areaLights;
@@ -135,10 +133,9 @@ void pathtraceInit(Scene* scene)
     cudaMalloc(&dev_intersections, pixelcount * sizeof(ShadeableIntersection));
     cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
-    cudaMalloc(&dev_activePaths, pixelcount * sizeof(PathSegment));
-
     // Mesh data
     // TODO:  multi mesh support
+    hst_positions.clear();
     if (scene->meshes.size() > 0)
     {
         hst_singleMesh = &scene->meshes[0];
@@ -173,18 +170,20 @@ void pathtraceInit(Scene* scene)
     // Debug buffers
     host_paths = new PathSegment[pixelcount];
 
+    cudaDeviceSynchronize();
     checkCUDAError("pathtraceInit");
 }
 
 void pathtraceFree()
 {
+    cudaDeviceSynchronize();
+
     cudaFree(dev_image);  // no-op if dev_image is null
     cudaFree(dev_paths);
     cudaFree(dev_geoms);
     cudaFree(dev_materials);
     cudaFree(dev_intersections);
     // TODO: clean up any extra device memory you created
-    cudaFree(dev_activePaths);
 
     // Mesh data
     cudaFree(dev_singleMeshPosition);
@@ -275,7 +274,7 @@ __global__ void computeIntersections(
     {
         PathSegment pathSegment = pathSegments[path_index];
 
-        float t;
+        float t = -1;
         glm::vec3 intersect_point;
         glm::vec3 normal;
         float t_min = FLT_MAX;
@@ -293,6 +292,11 @@ __global__ void computeIntersections(
         {
             Geom& geom = geoms[i];
 
+            Ray rt{
+                multiplyMV(geom.invTransform, glm::vec4(pathSegment.ray.origin, 1.0f)),
+                glm::normalize(multiplyMV(geom.invTransform, glm::vec4(pathSegment.ray.direction, 0.0f))),
+            };
+
             if (geom.type == CUBE)
             {
                 t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
@@ -306,15 +310,27 @@ __global__ void computeIntersections(
                 AABB aabb = meshBound[0]; 
                 if (aabbIntersectionTest(geom, aabb, pathSegment.ray))
                 {
-                    /*t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
-                        pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);*/
-
                     t = bvhIntersectionTest(geom, nodes, meshPositions, triangleIndices, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
+
                 }
-                else
+               
+
+                /*t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
+                    pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
+
+                glm::vec3 ttruNor = tmp_normal;*/
+
+                /*t = meshIntersectionTest_ObjectSpace(geom, meshPositions, meshTriangleCount,
+                    rt, tmp_intersect, tmp_normal, tmp_outside);
+
+                // project back to world-space
+                if (t != -1)
                 {
-                    t = -1;
-                }
+                    tmp_intersect = multiplyMV(geom.transform, glm::vec4(tmp_intersect, 1.f));
+                    tmp_normal = multiplyMV(geom.invTranspose, glm::vec4(tmp_normal, 0.f));
+                    tmp_normal = ttruNor;
+                    t = glm::length(pathSegment.ray.origin - tmp_intersect);
+                }*/
             }
 
             // Compute the minimum t from the intersection tests to determine what
@@ -502,7 +518,9 @@ void pathtrace(uchar4* pbo, int frame, int iter)
     // TODO: perform one iteration of path tracing
 
     generateRayFromCamera<<<blocksPerGrid2d, blockSize2d>>>(cam, iter, traceDepth, dev_paths);
-    checkCUDAError("generate camera ray");
+
+    // cudaDeviceSynchronize();
+    // checkCUDAError("generate camera ray");
 
     int depth = 0;
     PathSegment* dev_path_end = dev_paths + pixelcount;
@@ -532,7 +550,8 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_singleMeshAABB,
             dev_intersections
         );
-        checkCUDAError("trace one bounce");
+        // cudaDeviceSynchronize();
+        // checkCUDAError("trace one bounce");
 
         // shading
         shadeFakeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
@@ -543,7 +562,8 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_materials,
             depth
         );
-        checkCUDAError("shade material");
+        // cudaDeviceSynchronize();
+        // checkCUDAError("shade material");
 
         // compact
         /*PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
@@ -566,7 +586,6 @@ void pathtrace(uchar4* pbo, int frame, int iter)
 
     // Send results to OpenGL buffer for rendering
     sendImageToPBO<<<blocksPerGrid2d, blockSize2d>>>(pbo, cam.resolution, iter, dev_image);
-
 
 
     checkCUDAError("pathtrace");

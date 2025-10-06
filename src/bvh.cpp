@@ -15,7 +15,7 @@ using std::make_unique;
 uPtr<Node>& buildBvhFromRoot(uPtr<Node>& node, const std::vector<glm::vec3>& positions)
 {
     // If leaf node (1 triangle), stop recursion
-    if (node->triangleIndices.size() <= 1)
+    if (node->triangleIndices.size() <= 4)
     {
         node->isLeaf = true;
         // Compute bounding box for the triangle
@@ -77,6 +77,15 @@ uPtr<Node>& buildBvhFromRoot(uPtr<Node>& node, const std::vector<glm::vec3>& pos
 }
 
 
+int getNodeCount(const uPtr<Node>& node)
+{
+    if (node->isLeaf)
+    {
+        return 1;
+    }
+    return 1 + getNodeCount(node->left) + getNodeCount(node->right);
+}
+
 uPtr<Node> buildBvhFromPositionBuffer(const std::vector<glm::vec3>& positions)
 {
     if (positions.size() % 3 != 0)
@@ -98,50 +107,60 @@ uPtr<Node> buildBvhFromPositionBuffer(const std::vector<glm::vec3>& positions)
     return std::move(buildBvhFromRoot(root, positions));
 }
 
+// Convert the bvh tree to GPU friendly NodeProxy data
 void buildNodeProxyBuffers(const uPtr<Node>& in_node, std::vector<NodeProxy>& out_nodeProxies, std::vector<int>& out_triangles)
 {
     out_nodeProxies.clear();
     out_triangles.clear();
 
-    std::deque<Node*> workQueue{ in_node.get() };
+    // initialize
+    out_nodeProxies.reserve(getNodeCount(in_node));
     out_nodeProxies.push_back({});
+    std::deque<Node*> workQueue{ in_node.get() };
 
-    std::unordered_map<Node*, NodeProxy*> nodeToProxyLut {{in_node.get(), &out_nodeProxies.back()} };
+    std::unordered_map<Node*, int> nodeToProxyLut {{in_node.get(), 0} }; 
 
     while (workQueue.size() > 0)
     {
         Node* curNode = workQueue.front();
         workQueue.pop_front();
 
-        NodeProxy* curNodeProxy = nodeToProxyLut.at(curNode);
-        curNodeProxy->bound = curNode->bound;
+        NodeProxy& curNodeProxy = out_nodeProxies[nodeToProxyLut.at(curNode)];
+
+        curNodeProxy.bound = curNode->bound;
 
         if (curNode->isLeaf)
         {
-            curNodeProxy->triangleCount = curNode->triangleIndices.size();
-            curNodeProxy->triangleBufferOffset = out_triangles.size();
+            curNodeProxy.triangleCount = curNode->triangleIndices.size();
+            curNodeProxy.triangleBufferOffset = out_triangles.size();
             out_triangles.insert(out_triangles.end(), curNode->triangleIndices.begin(), curNode->triangleIndices.end());
             continue;
         }
 
-        // Parse node proxies first
+        // Push empty child Nodeproxy to result and set linkage
         if (curNode->left)
         {
-            curNodeProxy->leftChildIdx = out_nodeProxies.size();
-            out_nodeProxies.push_back(NodeProxy{});
-
             Node* leftChildNode = curNode->left.get();
+
+            int childIdx = out_nodeProxies.size();
+            out_nodeProxies.push_back(NodeProxy{});
+            curNodeProxy.leftChildIdx = childIdx;
+            nodeToProxyLut[leftChildNode] = childIdx;
+
+            // push child node to queue
             workQueue.push_back(leftChildNode);
-            nodeToProxyLut[leftChildNode] = &out_nodeProxies.back();
         }
         if (curNode->right)
         {
-            curNodeProxy->rightChildIdx = out_nodeProxies.size();
-            out_nodeProxies.push_back(NodeProxy{});
-
             Node* rightChildNode = curNode->right.get();
+
+            int childIdx = out_nodeProxies.size();
+            out_nodeProxies.push_back(NodeProxy{});
+            curNodeProxy.rightChildIdx = childIdx;
+            nodeToProxyLut[rightChildNode] = childIdx;
+
             workQueue.push_back(rightChildNode);
-            nodeToProxyLut[rightChildNode] = &out_nodeProxies.back();
+
         }
     }
 }

@@ -74,12 +74,12 @@ __device__ float sphereIntersectionTest(
     bool& outside);
 
 
+/* ------------------------------ Mesh ------------------------------ */
 // Test ray triangle
 __device__ float triangleIntersectionTest(
     const Geom& geom, Ray r,
     glm::vec3 va, glm::vec3 vb, glm::vec3 vc,
     glm::vec3& intersectionPoint, glm::vec3& barycentric);
-
 
 __device__ float meshIntersectionTest(
     const Geom& geom,
@@ -89,7 +89,6 @@ __device__ float meshIntersectionTest(
     glm::vec3& normal,
     bool& outside);
 
-
 __device__ bool aabbIntersectionTest(
     const Geom& mesh,
     AABB aabb,
@@ -98,11 +97,35 @@ __device__ bool aabbIntersectionTest(
 __device__ float bvhIntersectionTest(
     const Geom& geom,
     // bvh
-    const NodeProxy* node,
+    const NodeProxy* nodes,
     const glm::vec3* positions,
     const int* triangleIndices,
 
     Ray r,
     glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside);
+
+__device__ float leafNodeIntersectionTest(
+    const Geom& geom,
+    const glm::vec3* positions,
+    const int* triangleIndices,
+    int triangleCount,
+    Ray r,
+    glm::vec3& intersectionPoint,
+    glm::vec3& normal,
+    bool& outside);
+
+
+// objspace
+__device__ float triangleIntersectionTest_ObjectSpace(
+    const Geom& geom, Ray rt,
+    glm::vec3 va, glm::vec3 vb, glm::vec3 vc, glm::vec3& barycentric);
+
+
+__device__ float meshIntersectionTest_ObjectSpace(
+    const Geom& geom,
+    const glm::vec3* positions, int triangleCount,
+    Ray r,
     glm::vec3& normal,
     bool& outside);

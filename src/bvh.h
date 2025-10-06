@@ -31,8 +31,8 @@ struct NodeProxy
 {
     AABB bound;
 
-    int leftChildIdx;
-    int rightChildIdx;
+    int leftChildIdx = -1;
+    int rightChildIdx = -1;
 
     int triangleCount = 0;
     int triangleBufferOffset = -1;
