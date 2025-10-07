@@ -343,7 +343,7 @@ __device__ float bvhIntersectionTest(
         }
         else
         {
-            // Internal node — push children
+            // Internal node - push children
             const int left = nd.leftChildIdx;
             const int right = nd.rightChildIdx;
 

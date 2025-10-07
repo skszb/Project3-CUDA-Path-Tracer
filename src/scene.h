@@ -18,6 +18,5 @@ public:
     void loadFromJSON(const std::string& jsonName);
     void loadFromGLTF(const std::string& gltfName, bool fullReload);
 
-    void addDefaultScene();
     RenderState state;
 };

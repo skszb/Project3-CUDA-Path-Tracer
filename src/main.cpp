@@ -410,19 +410,37 @@ int main(int argc, char** argv)
 {
     startTimeString = currentTimeString();
 
+    startTimeString = currentTimeString();
+
     if (argc < 3)
     {
-        printf("Usage: %s [-g/-j] SCENEFILE.json\n", argv[0]);
+        printf("Usage: %s [-g/-j] SCENEFILE [-ld] DefaultScene \n", argv[0]);
         return 1;
     }
 
-    std::string loadMode = argv[1];
-    const char* sceneFile = argv[2];
+    std::string loadMode;
+    const char* sceneFile;
+
+    bool loadDefaultJsonScene = false;
+    std::string defaultJsonSceneFile;
     // Load scene file
     scene = new Scene();
 
-    scene->addDefaultScene(); // TODO: del
-    
+    for (int i = 1; i < argc; i += 1)
+    {
+        std::string op = std::string(argv[i]);
+        if (op == "-g" || op == "-j")
+        {
+            loadMode = argv[i];
+            sceneFile = argv[++i];
+        }
+        else if (op == "-ld")
+        {
+            loadDefaultJsonScene = true;
+            defaultJsonSceneFile = argv[++i];
+        }
+    }
+
     if (loadMode == "-j")
     {
         scene->loadFromJSON(sceneFile);
