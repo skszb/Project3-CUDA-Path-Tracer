@@ -308,6 +308,14 @@ void RenderImGui()
 
     ImGui::Begin("Settings");
     ImGui::Checkbox("Enable Debug", &imguiData->ShowDebugColor);
+    ImGui::Checkbox("Enable BVH", &imguiData->useBVH);
+    ImGui::Checkbox("Enable Mesh Bound", &imguiData->useAABB);
+
+    ImGui::Checkbox("Jitter AA", &imguiData->jitter);
+
+    ImGui::Checkbox("Early Out", &imguiData->earlyOut);
+    ImGui::Checkbox("Sort Material", &imguiData->sortMaterial);
+
     ImGui::End();
 
 
@@ -439,6 +447,11 @@ int main(int argc, char** argv)
             loadDefaultJsonScene = true;
             defaultJsonSceneFile = argv[++i];
         }
+    }
+
+    if (loadDefaultJsonScene)
+    {
+        scene->loadFromJSON(defaultJsonSceneFile);
     }
 
     if (loadMode == "-j")

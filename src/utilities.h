@@ -18,6 +18,15 @@ public:
     GuiDataContainer() : TracedDepth(0), ShowDebugColor(false){}
     int TracedDepth;
     bool ShowDebugColor;
+
+
+    bool useBVH = true;
+    bool useAABB = true;
+
+    bool jitter = true;
+
+    bool earlyOut = true;
+    bool sortMaterial = true;
 };
 
 namespace utilityCore

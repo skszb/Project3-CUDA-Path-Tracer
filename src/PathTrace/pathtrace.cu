@@ -205,12 +205,11 @@ void pathtraceFree()
 * motion blur - jitter rays "in time"
 * lens effect - jitter ray origin positions based on a lens
 */
-__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments)
+__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments, bool jitter)
 {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 
-    bool jitter = true;
 
     int index = x + (y * cam.resolution.x);
     thrust::default_random_engine rng = makeSeededRandomEngine(iter, index, 1); // TODO: depth = 0 creates artifacts of black seams on the sphere, need to figure out later
@@ -266,7 +265,8 @@ __global__ void computeIntersections(
     const int* triangleIndices,
     int meshTriangleCount,
     const AABB* meshBound,
-    ShadeableIntersection* intersections)
+    ShadeableIntersection* intersections, 
+    bool useBVH)
 {
     int path_index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -307,30 +307,19 @@ __global__ void computeIntersections(
             }
             else if (geom.type == MESH) 
             {
-                AABB aabb = meshBound[0]; 
+                AABB aabb = meshBound[0];
                 if (aabbIntersectionTest(geom, aabb, pathSegment.ray))
                 {
-                    t = bvhIntersectionTest(geom, nodes, meshPositions, triangleIndices, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
-
+                    if (useBVH)
+                    {
+                        t = bvhIntersectionTest(geom, nodes, meshPositions, triangleIndices, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
+                    }
+                    else
+                    {
+                        t = meshIntersectionTest(geom, meshPositions, meshTriangleCount, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
+                    }
                 }
-               
 
-                /*t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
-                    pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
-
-                glm::vec3 ttruNor = tmp_normal;*/
-
-                /*t = meshIntersectionTest_ObjectSpace(geom, meshPositions, meshTriangleCount,
-                    rt, tmp_intersect, tmp_normal, tmp_outside);
-
-                // project back to world-space
-                if (t != -1)
-                {
-                    tmp_intersect = multiplyMV(geom.transform, glm::vec4(tmp_intersect, 1.f));
-                    tmp_normal = multiplyMV(geom.invTranspose, glm::vec4(tmp_normal, 0.f));
-                    tmp_normal = ttruNor;
-                    t = glm::length(pathSegment.ray.origin - tmp_intersect);
-                }*/
             }
 
             // Compute the minimum t from the intersection tests to determine what
@@ -397,21 +386,6 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
             segment.color = materialColor * material.emittance * segment.throughput;
             segment.remainingBounces = 0;
         } 
-        /*if (!material.hasRefractive)
-        {
-            segment.color = materialColor;
-            segment.remainingBounces = 0;
-        }*/
-        /*else if (material.hasRefractive)
-        {
-            vec3 f; vec3 wiW; float pdf;
-            vec3 debug;
-            f = sample_f(debug, wiW, pdf, -segment.ray.direction, material, normal, intersection.outside, rng);
-
-            segment.color = f;
-            segment.color_debug = debug;
-            segment.remainingBounces = 0;
-        }*/
         else 
         {
             vec3 intersectionPos = getPointOnRay(segment.ray, intersection.t);
@@ -422,6 +396,7 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
             wiW = glm::normalize(wiW);
             float absCosThetaI = abs(dot(wiW, normal));
             segment.throughput *= f * absCosThetaI / pdf; // __fdividef(absCosTheta, pdf)
+            
             segment.color_debug = debug;
 
             // update next 
@@ -464,6 +439,15 @@ struct thread_is_active
         auto operator()(const PathSegment& seg) -> bool
     {
         return seg.remainingBounces > 0 && glm::length(seg.throughput) > EPSILON;
+    }
+};
+
+struct sort_by_material
+{
+    __device__
+    auto operator()(const ShadeableIntersection& a, const ShadeableIntersection& b)
+    {
+        return a.materialId < b.materialId;
     }
 };
 
@@ -517,7 +501,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
 
     // TODO: perform one iteration of path tracing
 
-    generateRayFromCamera<<<blocksPerGrid2d, blockSize2d>>>(cam, iter, traceDepth, dev_paths);
+    generateRayFromCamera<<<blocksPerGrid2d, blockSize2d>>>(cam, iter, traceDepth, dev_paths, guiData->jitter);
 
     // cudaDeviceSynchronize();
     // checkCUDAError("generate camera ray");
@@ -528,6 +512,7 @@ void pathtrace(uchar4* pbo, int frame, int iter)
 
     // --- PathSegment Tracing Stage ---
     // Shoot ray into scene, bounce between objects, push shading chunks
+
 
     bool iterationComplete = false;
     while (!iterationComplete)
@@ -548,10 +533,17 @@ void pathtrace(uchar4* pbo, int frame, int iter)
             dev_nodeTriangles,
             hst_singleMeshTriangleCount,
             dev_singleMeshAABB,
-            dev_intersections
+            dev_intersections,
+            guiData->useBVH
         );
         // cudaDeviceSynchronize();
         // checkCUDAError("trace one bounce");
+
+        if (guiData->sortMaterial)
+        {
+            thrust::sort_by_key(thrust::device, dev_intersections, dev_intersections + num_paths, dev_paths, sort_by_material());
+        }
+
 
         // shading
         shadeFakeMaterial<<<numblocksPathSegmentTracing, blockSize1d>>>(
@@ -566,9 +558,12 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // checkCUDAError("shade material");
 
         // compact
-        /*PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
-        num_paths = a - dev_paths;*/
-        // fprintf(stdout, "depth: %i, num_paths: %i\n", depth, num_paths);
+        if (guiData->earlyOut)
+        {
+            PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
+            num_paths = a - dev_paths;
+        }
+        fprintf(stdout, "depth: %i, num_paths: %i\n", depth, num_paths);
 
         depth++;
         if (num_paths < 1) iterationComplete = true;

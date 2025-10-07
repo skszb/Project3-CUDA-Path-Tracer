@@ -5,6 +5,7 @@
 #include "pathTraceUtils.h"
 #include "sceneStructs.h"
 
+
 using glm::vec3;
 using glm::vec2;
 
@@ -96,71 +97,6 @@ glm::vec3 sample_f(glm::vec3& debug, glm::vec3& wi_world, float& pdf,
     if (material.hasReflective)
     {
         return sample_specular_reflect(wi_world, pdf, wo_world, material, normal_world);
-    }
-    else if (material.hasRefractive)
-    {
-#if 0
-        pdf = 1;
-        // acquire the direction of the ray
-        const glm::vec3 direction{ -glm::normalize(wo_world) };
-
-        // generate a random decimal
-        thrust::uniform_real_distribution<float> distribution(0.0f, 1.0f);
-        float random_decimal{ distribution(rng) };
-
-        float etaI = outside ? material.indexOfRefraction : 1.0f;
-        float etaT = outside ? 1.0f : material.indexOfRefraction;
-
-        vec3 refr = glm::refract(-wo_world, normal_world, etaT / etaI);
-        float fresnel;
-        if (glm::length(refr) < 0.1f)
-        {
-            fresnel = 1;
-        }
-        else
-        {
-            float cos = glm::abs(glm::dot(refr, normal_world));
-            float R0 = (etaI - etaT) / (etaI + etaT);
-            R0 = R0 * R0;
-            fresnel = R0 + (1 - R0) * pow(1 - cos, 5);
-        }
-
-        vec3 spectrum;
-        // perform refraction when the Fresnel factor is small
-        if (random_decimal > fresnel)
-        {
-            wi_world = refr;
-            spectrum = 2.0f * material.color * (1- fresnel) / glm::abs(glm::dot(wi_world, normal_world));
-        }
-        else
-        {
-            wi_world = glm::reflect(direction, normal_world);
-            spectrum = 2.0f *  material.color * fresnel / glm::abs(glm::dot(wi_world, normal_world));
-        }
-        return spectrum;
-#endif
-        pdf = 1;
-        float etaI = outside ? material.indexOfRefraction : 1.0f;
-        float etaT = outside ? 1.0f : material.indexOfRefraction;
-
-        vec3 T = sample_specular_refract(debug, wi_world, pdf, wo_world, material, normal_world, etaI, etaT);
-
-        thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
-        float refl = u01(rng);
-
-        if (refl < 0.5f)
-        {
-            float fresnel = fresnelDielectricEval(glm::abs(glm::dot(wi_world, normal_world)), etaI, etaT);
-            return 2.0f * (1 - fresnel) * T;
-        }
-        else
-        {
-            vec3 R = sample_specular_reflect(wi_world, pdf, wo_world, material, normal_world);
-            float fresnel = fresnelDielectricEval(glm::abs(glm::dot(wi_world, normal_world)), etaI, etaT);
-
-            return 2.0f * fresnel * R;
-        }
-
     }
     else
     {
