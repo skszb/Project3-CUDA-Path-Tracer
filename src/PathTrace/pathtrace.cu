@@ -311,26 +311,7 @@ __global__ void computeIntersections(
                 if (aabbIntersectionTest(geom, aabb, pathSegment.ray))
                 {
                     t = bvhIntersectionTest(geom, nodes, meshPositions, triangleIndices, pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
-
                 }
-               
-
-                /*t = meshIntersectionTest(geom, meshPositions, meshTriangleCount,
-                    pathSegment.ray, tmp_intersect, tmp_normal, tmp_outside);
-
-                glm::vec3 ttruNor = tmp_normal;*/
-
-                /*t = meshIntersectionTest_ObjectSpace(geom, meshPositions, meshTriangleCount,
-                    rt, tmp_intersect, tmp_normal, tmp_outside);
-
-                // project back to world-space
-                if (t != -1)
-                {
-                    tmp_intersect = multiplyMV(geom.transform, glm::vec4(tmp_intersect, 1.f));
-                    tmp_normal = multiplyMV(geom.invTranspose, glm::vec4(tmp_normal, 0.f));
-                    tmp_normal = ttruNor;
-                    t = glm::length(pathSegment.ray.origin - tmp_intersect);
-                }*/
             }
 
             // Compute the minimum t from the intersection tests to determine what
@@ -358,6 +339,45 @@ __global__ void computeIntersections(
             intersections[path_index].outside = outside;
         }
     }
+}
+
+__device__
+bool Refract(glm::vec3 wi, glm::vec3 n, float eta, glm::vec3& wt)
+{
+    // Compute cos theta using Snell's law
+    float cosThetaI = glm::dot(n, wi);
+    float sin2ThetaI = max(float(0), float(1 - cosThetaI * cosThetaI));
+    float sin2ThetaT = eta * 1 * sin2ThetaI;
+
+    // Handle total internal reflection for transmission
+    if (sin2ThetaT >= 1) return false;
+    float cosThetaT = sqrt(1 - sin2ThetaT);
+    wt = eta * -wi + (eta * cosThetaI - cosThetaT) * n;
+    return true;
+}
+
+
+__device__
+float fresnelDielectricEval(float cosThetaI, float etaI, float etaT)
+{
+    // Compute cosThetaT using Snell's law>
+    float sinThetaI = sqrt(max(0.f, 1.f - cosThetaI * cosThetaI));
+    float sinThetaT = etaI / etaT * sinThetaI;
+
+    // total internal reflection
+    if (sinThetaT > 1.f)
+    {
+        return 1.f;
+    }
+
+    float cosThetaT = sqrt(max(0.f, 1.f - sinThetaT * sinThetaT));
+
+    float Rparl = ((etaT * cosThetaI) - (etaI * cosThetaT)) /
+        ((etaT * cosThetaI) + (etaI * cosThetaT));
+    float Rperp = ((etaI * cosThetaI) - (etaT * cosThetaT)) /
+        ((etaI * cosThetaI) + (etaT * cosThetaT));
+
+    return (Rparl * Rparl + Rperp * Rperp) * 0.5f;
 }
 
 // LOOK: "fake" shader demonstrating what you might do with the info in
@@ -392,27 +412,67 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
         Material material = materials[intersection.materialId];
         vec3 materialColor = material.color;
         vec3 normal = intersection.surfaceNormal;
+
+ 
         // If the material indicates that the object was a light, "light" the ray
         if (material.emittance > 0.0f) {
             segment.color = materialColor * material.emittance * segment.throughput;
             segment.remainingBounces = 0;
-        } 
-        /*if (!material.hasRefractive)
+        }
+        else if (material.hasRefractive)
         {
-            segment.color = materialColor;
-            segment.remainingBounces = 0;
-        }*/
-        /*else if (material.hasRefractive)
-        {
-            vec3 f; vec3 wiW; float pdf;
-            vec3 debug;
-            f = sample_f(debug, wiW, pdf, -segment.ray.direction, material, normal, intersection.outside, rng);
+            bool outside = intersection.outside;
 
-            segment.color = f;
-            segment.color_debug = debug;
-            segment.remainingBounces = 0;
-        }*/
-        else 
+            vec3 wo = glm::normalize(-segment.ray.direction);
+            vec3 wi;
+            vec3 N = glm::normalize(intersection.surfaceNormal);
+
+            float etaI = outside ? 1.f : material.indexOfRefraction;
+            float etaT = outside ? material.indexOfRefraction : 1.f;
+
+            float eta = etaI / etaT;
+
+            vec3 reflect = -wo + 2.f * abs(dot(wo, N)) * N;
+            vec3 refract;
+            bool hasRefraction = Refract(wo, N, eta, refract);
+
+            if (!hasRefraction)
+            {
+                // Total internal reflection
+                wi = glm::normalize(reflect);
+                segment.throughput *= materialColor;
+            }
+            else
+            {
+                float refl = u01(rng);  // randomly select
+                if (refl < 0.5)
+                {
+                    wi = glm::normalize(reflect);
+                    float fresnel = fresnelDielectricEval(abs(dot(wi, N)), etaI, etaT);
+
+                    segment.throughput *= 2.0f * materialColor * fresnel;
+                }
+                else
+                {
+                    // Refraction
+                    wi = glm::normalize(refract);
+                    float fresnel = fresnelDielectricEval(abs(dot(wi, -N)), etaI, etaT);
+                    segment.throughput *= 2.0f * materialColor * (1 - fresnel);
+                }
+            }
+
+            // ret
+            segment.ray.origin = getPointOnRay(segment.ray, intersection.t) + 0.1f * glm::sign(dot(wi, N)) * N;
+            segment.ray.direction = wi;
+            segment.color_debug = COLOR_DEBUG;
+
+            // out
+            segment.remainingBounces -= 1;
+
+            pathSegments[idx] = segment;
+            return;
+        }
+        else
         {
             vec3 intersectionPos = getPointOnRay(segment.ray, intersection.t);
 
@@ -422,10 +482,9 @@ __global__ void shadeFakeMaterial(int iter, int num_paths, ShadeableIntersection
             wiW = glm::normalize(wiW);
             float absCosThetaI = abs(dot(wiW, normal));
             segment.throughput *= f * absCosThetaI / pdf; // __fdividef(absCosTheta, pdf)
-            segment.color_debug = debug;
 
             // update next 
-            segment.ray.origin = intersectionPos + wiW * 0.01f; // fix self-intersection
+            segment.ray.origin = intersectionPos + glm::sign(dot(wiW, normal)) * normal * 0.01f; // fix self-intersection
             segment.ray.direction = wiW;
 
             segment.remainingBounces -= 1;
@@ -566,13 +625,13 @@ void pathtrace(uchar4* pbo, int frame, int iter)
         // checkCUDAError("shade material");
 
         // compact
-        /*PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
-        num_paths = a - dev_paths;*/
+        PathSegment* a = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths, thread_is_active());
+        num_paths = a - dev_paths;
         // fprintf(stdout, "depth: %i, num_paths: %i\n", depth, num_paths);
 
         depth++;
         if (num_paths < 1) iterationComplete = true;
-        if (depth >= 8) iterationComplete = true;
+        if (depth >= 10) iterationComplete = true;
 
         if (guiData != NULL)
         {
