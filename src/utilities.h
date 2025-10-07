@@ -25,8 +25,8 @@ public:
 
     bool jitter = true;
 
-    bool earlyOut = true;
-    bool sortMaterial = true;
+    bool earlyOut = false;
+    bool sortMaterial = false;
 };
 
 namespace utilityCore
